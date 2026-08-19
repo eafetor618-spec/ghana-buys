@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post an Item — Ghana Buys Marketplace</title>
+<meta name="description" content="Post an item for sale on Ghana Buys — free, takes a couple of minutes, buyers reach you directly on WhatsApp.">
+<link rel="canonical" href="https://ghanabuys.com/post">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Post an Item — Ghana Buys Marketplace">
+<meta property="og:description" content="Post an item for sale on Ghana Buys — free, buyers reach you directly on WhatsApp.">
+<meta property="og:url" content="https://ghanabuys.com/post">
+<meta name="twitter:card" content="summary">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="page-post">
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <a class="back" href="/marketplace">&larr; All listings</a>
+</nav>
+<div class="kente-bar"></div>
+
+<article class="wrap">
+  <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span class="crumb-sep">/</span><a href="/marketplace">Marketplace</a><span class="crumb-sep">/</span><span aria-current="page" id="crumbLabel">Post an Item</span></nav>
+  <span class="tag">Sell</span>
+  <h1 class="title" id="pageHeading">Post an item</h1>
+  <p class="lead">Free to post. Buyers will see your listing on the marketplace and message you directly on WhatsApp — nothing routes through us.</p>
+
+  <div id="gate">
+    <div class="auth-required">
+      <h2>Log in to post</h2>
+      <p>You'll need a free account so you can manage and edit your own listings later.</p>
+      <a class="btn-primary" href="/account?next=/post">Log in or sign up</a>
+    </div>
+  </div>
+
+  <form class="mp-form" id="postForm" style="display:none;">
+    <div class="form-group">
+      <label for="title">Item title</label>
+      <input type="text" id="title" required maxlength="120" placeholder="e.g. iPhone 12, 128GB — barely used">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="price">Price (₵)</label>
+        <input type="number" id="price" min="0" step="1" placeholder="e.g. 2500">
+        <div class="hint">Leave blank for "Price on request"</div>
+      </div>
+      <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" required>
+          <option value="">Choose one…</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="location">Location</label>
+      <input type="text" id="location" maxlength="80" placeholder="e.g. East Legon, Accra">
+    </div>
+
+    <div class="form-group">
+      <label for="whatsapp">WhatsApp number</label>
+      <input type="tel" id="whatsapp" required placeholder="e.g. 024 123 4567">
+      <div class="hint">Buyers tap a button to message this number on WhatsApp — it's shown on your listing.</div>
+    </div>
+
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" maxlength="1500" placeholder="Condition, why you're selling, any details a buyer would want to know…"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="photo">Photo</label>
+      <div class="file-drop" id="fileDrop">Tap to add a photo (optional, but listings with photos get more replies)</div>
+      <input type="file" id="photo" accept="image/*" style="display:none;">
+      <div class="file-preview" id="filePreview"><img id="filePreviewImg" alt=""></div>
+    </div>
+
+    <button type="submit" class="form-submit" id="submitBtn">Post listing</button>
+    <div class="form-status" id="formStatus"></div>
+  </form>
+</article>
+
+<div class="kente-bar"></div>
+<footer>
+  <div class="footer-inner">
+    <span>&copy; 2026 Ghana Buys</span>
+    <span>Ghana's marketplace — buy, sell, connect</span>
+    <a href="/marketplace" style="color:var(--ink-soft);">Browse Listings</a>
+    <a href="/privacy" style="color:var(--ink-soft);">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="/marketplace.js"></script>
+<script>
+
+  const editId = new URLSearchParams(location.search).get('id');
+  const gate = document.getElementById('gate');
+  const form = document.getElementById('postForm');
+  const statusEl = document.getElementById('formStatus');
+  const submitBtn = document.getElementById('submitBtn');
+  const categorySelect = document.getElementById('category');
+  const fileInput = document.getElementById('photo');
+  const fileDrop = document.getElementById('fileDrop');
+  const filePreview = document.getElementById('filePreview');
+  const filePreviewImg = document.getElementById('filePreviewImg');
+
+  CATEGORIES.forEach(function (cat) {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    categorySelect.appendChild(opt);
+  });
+
+  let selectedFile = null;
+  let existingImageUrl = null;
+  let currentUser = null;
+
+  fileDrop.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    const file = fileInput.files[0];
+    if (!file) return;
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      filePreviewImg.src = e.target.result;
+      filePreview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session || !session.user) {
+      gate.style.display = 'block';
+      form.style.display = 'none';
+      return;
+    }
+    currentUser = session.user;
+    gate.style.display = 'none';
+    form.style.display = 'block';
+
+    if (editId) {
+      document.getElementById('pageHeading').textContent = 'Edit your listing';
+      document.getElementById('crumbLabel').textContent = 'Edit Listing';
+      submitBtn.textContent = 'Save changes';
+      const { data, error } = await sb.from('listings').select('*').eq('id', editId).maybeSingle();
+      if (error || !data || data.user_id !== currentUser.id) {
+        statusEl.textContent = "Couldn't load that listing, or it's not yours to edit.";
+        statusEl.className = 'form-status error';
+        form.style.display = 'none';
+        return;
+      }
+      document.getElementById('title').value = data.title || '';
+      document.getElementById('price').value = data.price || '';
+      document.getElementById('category').value = data.category || '';
+      document.getElementById('location').value = data.location || '';
+      document.getElementById('whatsapp').value = data.whatsapp || '';
+      document.getElementById('description').value = data.description || '';
+      if (data.image_url) {
+        existingImageUrl = data.image_url;
+        filePreviewImg.src = data.image_url;
+        filePreview.style.display = 'block';
+      }
+    }
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const title = document.getElementById('title').value.trim();
+    const priceRaw = document.getElementById('price').value;
+    const category = document.getElementById('category').value;
+    const locationValue = document.getElementById('location').value.trim();
+    const whatsapp = document.getElementById('whatsapp').value.trim();
+    const description = document.getElementById('description').value.trim();
+
+    if (!title || !category || !whatsapp) {
+      statusEl.textContent = 'Please fill in the title, category, and WhatsApp number.';
+      statusEl.className = 'form-status error';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = editId ? 'Saving…' : 'Posting…';
+    statusEl.textContent = '';
+    statusEl.className = 'form-status';
+
+    try {
+      let imageUrl = existingImageUrl;
+      if (selectedFile) {
+        const ext = selectedFile.name.split('.').pop();
+        const path = currentUser.id + '/' + Date.now() + '.' + ext;
+        const { error: uploadError } = await sb.storage.from('listing-images').upload(path, selectedFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = sb.storage.from('listing-images').getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      }
+
+      const payload = {
+        title: title,
+        price: priceRaw === '' ? null : Number(priceRaw),
+        category: category,
+        location: locationValue || null,
+        whatsapp: whatsapp,
+        description: description || null,
+        image_url: imageUrl
+      };
+
+      if (editId) {
+        const { error } = await sb.from('listings').update(payload).eq('id', editId);
+        if (error) throw error;
+        window.location.href = '/listing?id=' + editId;
+      } else {
+        payload.user_id = currentUser.id;
+        payload.seller_name = currentUser.user_metadata && currentUser.user_metadata.display_name
+          ? currentUser.user_metadata.display_name
+          : currentUser.email.split('@')[0];
+        payload.status = 'active';
+        const { data, error } = await sb.from('listings').insert(payload).select().single();
+        if (error) throw error;
+        window.location.href = '/listing?id=' + data.id;
+      }
+    } catch (err) {
+      statusEl.textContent = 'Something went wrong: ' + (err.message || 'please try again.');
+      statusEl.className = 'form-status error';
+      submitBtn.disabled = false;
+      submitBtn.textContent = editId ? 'Save changes' : 'Post listing';
+    }
+  });
+
+  init();
+
+</script>
+
+</body>
+</html>
