@@ -192,20 +192,41 @@
 
       wrap.innerHTML = data.map(function (l) {
         const img = l.image_url ? '<img src="' + escapeHtml(l.image_url) + '" alt="">' : '';
+        const daysLeft = l.expires_at ? Math.ceil((new Date(l.expires_at) - new Date()) / 86400000) : null;
+        const expiryNote = l.status === 'active' && daysLeft !== null
+          ? (daysLeft <= 5
+              ? '<span class="expiry-note warn">Expires in ' + Math.max(daysLeft, 0) + ' day' + (daysLeft === 1 ? '' : 's') + '</span>'
+              : '<span class="expiry-note">Expires ' + formatDate(l.expires_at) + '</span>')
+          : '';
+
+        let actions = '<a class="action-btn" href="/listing?id=' + l.id + '">View</a>';
+        if (l.status === 'active' || l.status === 'expired') {
+          actions += '<a class="action-btn" href="/post?id=' + l.id + '">Edit</a>';
+        }
+        if (l.status === 'active') {
+          actions += '<button class="action-btn" data-action="sold" data-id="' + l.id + '">Mark sold</button>';
+          if (daysLeft !== null && daysLeft <= 5) {
+            actions += '<button class="action-btn" data-action="renew" data-id="' + l.id + '">Renew (+30 days)</button>';
+          }
+        }
+        if (l.status === 'sold' || l.status === 'expired') {
+          actions += '<button class="action-btn" data-action="relist" data-id="' + l.id + '">Relist</button>';
+        }
+        if (l.status === 'removed' || l.status === 'under_review') {
+          actions += '<span class="expiry-note">' + (l.status === 'under_review' ? 'Pending review' : 'Removed by moderation') + '</span>';
+        }
+        actions += '<button class="action-btn danger" data-action="delete" data-id="' + l.id + '">Delete</button>';
+
         return (
           '<div class="my-listing-row" data-id="' + l.id + '">' +
             '<div class="my-listing-thumb">' + img + '</div>' +
             '<div class="my-listing-info">' +
               '<span class="status-badge ' + l.status + '">' + l.status + '</span>' +
+              expiryNote +
               '<h4>' + escapeHtml(l.title) + '</h4>' +
               '<span class="listing-price">' + formatPrice(l.price) + '</span>' +
             '</div>' +
-            '<div class="my-listing-actions">' +
-              '<a class="action-btn" href="/listing?id=' + l.id + '">View</a>' +
-              '<a class="action-btn" href="/post?id=' + l.id + '">Edit</a>' +
-              (l.status === 'active' ? '<button class="action-btn" data-action="sold" data-id="' + l.id + '">Mark sold</button>' : '') +
-              '<button class="action-btn danger" data-action="delete" data-id="' + l.id + '">Delete</button>' +
-            '</div>' +
+            '<div class="my-listing-actions">' + actions + '</div>' +
           '</div>'
         );
       }).join('');
@@ -222,6 +243,26 @@
     if (btn.dataset.action === 'sold') {
       btn.disabled = true; btn.textContent = 'Updating…';
       await sb.from('listings').update({ status: 'sold' }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'renew') {
+      btn.disabled = true; btn.textContent = 'Renewing…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({ expires_at: newExpiry }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'relist') {
+      btn.disabled = true; btn.textContent = 'Relisting…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({
+        status: 'active',
+        expires_at: newExpiry,
+        created_at: new Date().toISOString()
+      }).eq('id', id);
       const { data: { session } } = await sb.auth.getSession();
       loadMyListings(session.user.id);
     }
