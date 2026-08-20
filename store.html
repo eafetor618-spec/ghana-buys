@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Store — Ghana Buys</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="page-store">
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <div class="nav-actions">
+    <a class="back" href="/marketplace">&larr; All listings</a>
+    <a class="nav-sell" href="/post">+ Sell</a>
+    <a class="nav-account" href="/account" id="navAccountLink">Log in</a>
+  </div>
+</nav>
+<div class="kente-bar"></div>
+
+<article class="wrap" id="storeArticle">
+  <div class="empty-state"><h3>Loading store…</h3></div>
+</article>
+
+<div class="kente-bar"></div>
+<footer>
+  <div class="footer-inner">
+    <span>&copy; 2026 Ghana Buys</span>
+    <span>Ghana's marketplace — buy, sell, connect</span>
+    <a href="/marketplace" style="color:var(--ink-soft);">Marketplace</a>
+    <a href="/privacy" style="color:var(--ink-soft);">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="/marketplace.js"></script>
+<script>
+  const storeId = new URLSearchParams(location.search).get('id');
+  const article = document.getElementById('storeArticle');
+
+  async function loadStore() {
+    if (!storeId) {
+      article.innerHTML = '<div class="empty-state"><h3>Store not found</h3></div>';
+      return;
+    }
+
+    const { data: store, error } = await sb.from('stores').select('*').eq('id', storeId).maybeSingle();
+
+    if (error || !store) {
+      article.innerHTML = '<div class="empty-state"><h3>Store not found</h3><p>This store may have been removed.</p></div>';
+      return;
+    }
+
+    const isActive = store.active && store.expires_at && new Date(store.expires_at) > new Date();
+    const badge = isActive ? '<span class="listing-featured-badge" style="position:static;display:inline-block;margin-bottom:10px;">✓ Verified Store</span>' : '';
+
+    article.innerHTML =
+      '<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span class="crumb-sep">/</span><a href="/marketplace">Marketplace</a><span class="crumb-sep">/</span><span aria-current="page">' + escapeHtml(store.name) + '</span></nav>' +
+      badge +
+      '<h1 class="title">' + escapeHtml(store.name) + '</h1>' +
+      (store.description ? '<p class="lead">' + escapeHtml(store.description) + '</p>' : '') +
+      (store.whatsapp ? '<a class="cta" href="' + whatsappLink(store.whatsapp, 'Hi! I saw your store on Ghana Buys.') + '" target="_blank" rel="noopener">Message on WhatsApp →</a>' : '') +
+      '<h2 class="section-h" style="margin-top:36px;">Listings from this store</h2>' +
+      '<div class="listing-grid" id="storeListings" style="margin-top:16px;"><div class="empty-state" style="grid-column:1/-1;"><h3>Loading…</h3></div></div>';
+
+    if (!isActive) {
+      const notice = document.createElement('div');
+      notice.className = 'callout';
+      notice.style.marginTop = '16px';
+      notice.innerHTML = '<strong>Note:</strong> This store\'s subscription isn\'t currently active.';
+      article.insertBefore(notice, article.querySelector('h2.section-h'));
+    }
+
+    const { data: listings } = await sb
+      .from('listings')
+      .select('*')
+      .eq('user_id', store.user_id)
+      .eq('status', 'active')
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    const grid = document.getElementById('storeListings');
+    if (!listings || !listings.length) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>No active listings right now</h3></div>';
+      return;
+    }
+    grid.innerHTML = listings.map(listingCardHTML).join('');
+    refreshSavedButtons();
+  }
+
+  loadStore();
+</script>
+
+</body>
+</html>
