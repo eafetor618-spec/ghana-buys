@@ -190,6 +190,7 @@
       }
 
       grid.innerHTML = data.map(listingCardHTML).join('');
+      refreshSavedButtons();
     } catch (err) {
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>Couldn\'t load listings</h3><p>Refresh the page, or check back shortly.</p></div>';
     }

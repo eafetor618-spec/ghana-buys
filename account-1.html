@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — Ghana Buys Marketplace</title>
+<meta name="description" content="Log in or sign up to Ghana Buys, and manage the items you've posted for sale.">
+<link rel="canonical" href="https://ghanabuys.com/account">
+<meta property="og:type" content="website">
+<meta name="robots" content="noindex">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="page-account">
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <a class="back" href="/marketplace">&larr; All listings</a>
+</nav>
+<div class="kente-bar"></div>
+
+<article class="wrap">
+
+  <div id="loggedOutView">
+    <span class="tag">Account</span>
+    <h1 class="title">Log in or sign up</h1>
+    <p class="lead">One free account to post listings, manage them, and get replies on WhatsApp.</p>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="tabLogin">Log in</button>
+      <button type="button" class="auth-tab" id="tabSignup">Sign up</button>
+    </div>
+
+    <form class="mp-form auth-panel active" id="loginPanel">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="form-submit" id="loginBtn">Log in</button>
+      <div class="form-status" id="loginStatus"></div>
+    </form>
+
+    <form class="mp-form auth-panel" id="signupPanel">
+      <div class="form-group">
+        <label for="signupName">Your name</label>
+        <input type="text" id="signupName" required maxlength="60" placeholder="Shown on your listings">
+      </div>
+      <div class="form-group">
+        <label for="signupEmail">Email</label>
+        <input type="email" id="signupEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="signupPassword">Password</label>
+        <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
+        <div class="hint">At least 6 characters.</div>
+      </div>
+      <button type="submit" class="form-submit" id="signupBtn">Create account</button>
+      <div class="form-status" id="signupStatus"></div>
+    </form>
+  </div>
+
+  <div id="loggedInView" style="display:none;">
+    <div class="account-header">
+      <div>
+        <span class="tag">Account</span>
+        <h1 class="title">My listings</h1>
+        <div class="account-email" id="accountEmail"></div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <a class="btn-secondary" href="/post">+ New listing</a>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+
+    <div class="admin-tabs" style="margin-top:24px;">
+      <button type="button" class="auth-tab active" id="tabMyListings">My listings</button>
+      <button type="button" class="auth-tab" id="tabSaved">Saved</button>
+    </div>
+
+    <div id="myListings" style="margin-top:20px;">
+      <div class="empty-state"><h3>Loading your listings…</h3></div>
+    </div>
+    <div id="savedListings" style="margin-top:20px; display:none;"></div>
+  </div>
+
+</article>
+
+<div class="kente-bar"></div>
+<footer>
+  <div class="footer-inner">
+    <span>&copy; 2026 Ghana Buys</span>
+    <span>Ghana's marketplace — buy, sell, connect</span>
+    <a href="/marketplace" style="color:var(--ink-soft);">Browse Listings</a>
+    <a href="/privacy" style="color:var(--ink-soft);">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="/marketplace.js"></script>
+<script>
+
+  const loggedOutView = document.getElementById('loggedOutView');
+  const loggedInView = document.getElementById('loggedInView');
+  const nextUrl = new URLSearchParams(location.search).get('next') || '/account';
+
+  // --- Tab switching ---
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const loginPanel = document.getElementById('loginPanel');
+  const signupPanel = document.getElementById('signupPanel');
+
+  tabLogin.addEventListener('click', function () {
+    tabLogin.classList.add('active'); tabSignup.classList.remove('active');
+    loginPanel.classList.add('active'); signupPanel.classList.remove('active');
+  });
+  tabSignup.addEventListener('click', function () {
+    tabSignup.classList.add('active'); tabLogin.classList.remove('active');
+    signupPanel.classList.add('active'); loginPanel.classList.remove('active');
+  });
+
+  // --- Login ---
+  document.getElementById('loginPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    const statusEl = document.getElementById('loginStatus');
+    btn.disabled = true; btn.textContent = 'Logging in…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    const { error } = await sb.auth.signInWithPassword({ email: email, password: password });
+    if (error) {
+      statusEl.textContent = error.message || 'Could not log in — check your details.';
+      statusEl.className = 'form-status error';
+      btn.disabled = false; btn.textContent = 'Log in';
+      return;
+    }
+    window.location.href = nextUrl;
+  });
+
+  // --- Sign up ---
+  document.getElementById('signupPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('signupBtn');
+    const statusEl = document.getElementById('signupStatus');
+    btn.disabled = true; btn.textContent = 'Creating account…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const name = document.getElementById('signupName').value.trim();
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+
+    const { data, error } = await sb.auth.signUp({
+      email: email,
+      password: password,
+      options: { data: { display_name: name } }
+    });
+
+    if (error) {
+      statusEl.textContent = error.message || 'Could not create your account.';
+      statusEl.className = 'form-status error';
+      btn.disabled = false; btn.textContent = 'Create account';
+      return;
+    }
+
+    if (data.session) {
+      window.location.href = nextUrl;
+    } else {
+      statusEl.textContent = 'Almost there — check your email to confirm your account, then log in.';
+      statusEl.className = 'form-status success';
+      btn.disabled = false; btn.textContent = 'Create account';
+    }
+  });
+
+  // --- Logout ---
+  document.getElementById('logoutBtn').addEventListener('click', async function () {
+    await sb.auth.signOut();
+    window.location.href = '/';
+  });
+
+  // --- My listings dashboard ---
+  async function loadMyListings(userId) {
+    const wrap = document.getElementById('myListings');
+    try {
+      const { data, error } = await sb.from('listings').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        wrap.innerHTML = '<div class="empty-state"><h3>No listings yet</h3><p>Post your first item to see it here.</p></div>';
+        return;
+      }
+
+      wrap.innerHTML = data.map(function (l) {
+        const img = l.image_url ? '<img src="' + escapeHtml(l.image_url) + '" alt="">' : '';
+        const daysLeft = l.expires_at ? Math.ceil((new Date(l.expires_at) - new Date()) / 86400000) : null;
+        const expiryNote = l.status === 'active' && daysLeft !== null
+          ? (daysLeft <= 5
+              ? '<span class="expiry-note warn">Expires in ' + Math.max(daysLeft, 0) + ' day' + (daysLeft === 1 ? '' : 's') + '</span>'
+              : '<span class="expiry-note">Expires ' + formatDate(l.expires_at) + '</span>')
+          : '';
+
+        let actions = '<a class="action-btn" href="/listing?id=' + l.id + '">View</a>';
+        if (l.status === 'active' || l.status === 'expired') {
+          actions += '<a class="action-btn" href="/post?id=' + l.id + '">Edit</a>';
+        }
+        if (l.status === 'active') {
+          actions += '<button class="action-btn" data-action="sold" data-id="' + l.id + '">Mark sold</button>';
+          if (daysLeft !== null && daysLeft <= 5) {
+            actions += '<button class="action-btn" data-action="renew" data-id="' + l.id + '">Renew (+30 days)</button>';
+          }
+        }
+        if (l.status === 'sold' || l.status === 'expired') {
+          actions += '<button class="action-btn" data-action="relist" data-id="' + l.id + '">Relist</button>';
+        }
+        if (l.status === 'removed' || l.status === 'under_review') {
+          actions += '<span class="expiry-note">' + (l.status === 'under_review' ? 'Pending review' : 'Removed by moderation') + '</span>';
+        }
+        actions += '<button class="action-btn danger" data-action="delete" data-id="' + l.id + '">Delete</button>';
+
+        return (
+          '<div class="my-listing-row" data-id="' + l.id + '">' +
+            '<div class="my-listing-thumb">' + img + '</div>' +
+            '<div class="my-listing-info">' +
+              '<span class="status-badge ' + l.status + '">' + l.status + '</span>' +
+              expiryNote +
+              '<h4>' + escapeHtml(l.title) + '</h4>' +
+              '<span class="listing-price">' + formatPrice(l.price) + '</span>' +
+            '</div>' +
+            '<div class="my-listing-actions">' + actions + '</div>' +
+          '</div>'
+        );
+      }).join('');
+    } catch (err) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load your listings</h3><p>Refresh the page, or check back shortly.</p></div>';
+    }
+  }
+
+  document.getElementById('myListings').addEventListener('click', async function (e) {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+
+    if (btn.dataset.action === 'sold') {
+      btn.disabled = true; btn.textContent = 'Updating…';
+      await sb.from('listings').update({ status: 'sold' }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'renew') {
+      btn.disabled = true; btn.textContent = 'Renewing…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({ expires_at: newExpiry }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'relist') {
+      btn.disabled = true; btn.textContent = 'Relisting…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({
+        status: 'active',
+        expires_at: newExpiry,
+        created_at: new Date().toISOString()
+      }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'delete') {
+      if (!confirm('Delete this listing? This can\'t be undone.')) return;
+      btn.disabled = true; btn.textContent = 'Deleting…';
+      await sb.from('listings').delete().eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+  });
+
+  // --- Which view to show ---
+  // --- My listings / Saved tabs ---
+  document.getElementById('tabMyListings').addEventListener('click', function () {
+    setAccountTab('mine');
+  });
+  document.getElementById('tabSaved').addEventListener('click', function () {
+    setAccountTab('saved');
+  });
+  function setAccountTab(which) {
+    document.getElementById('tabMyListings').classList.toggle('active', which === 'mine');
+    document.getElementById('tabSaved').classList.toggle('active', which === 'saved');
+    document.getElementById('myListings').style.display = which === 'mine' ? '' : 'none';
+    document.getElementById('savedListings').style.display = which === 'saved' ? '' : 'none';
+    if (which === 'saved') loadSavedListings();
+  }
+
+  async function loadSavedListings() {
+    const wrap = document.getElementById('savedListings');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await sb
+      .from('saved_listings')
+      .select('listing_id, listings(*)')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load saved listings</h3><p>Refresh the page, or check back shortly.</p></div>';
+      return;
+    }
+
+    const listings = (data || []).map(function (r) { return r.listings; }).filter(Boolean);
+    if (!listings.length) {
+      wrap.innerHTML = '<div class="empty-state"><h3>No saved listings yet</h3><p>Tap the heart on any listing to save it here.</p></div>';
+      return;
+    }
+
+    wrap.innerHTML = '<div class="listing-grid">' + listings.map(listingCardHTML).join('') + '</div>';
+    refreshSavedButtons();
+  }
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session && session.user) {
+      loggedOutView.style.display = 'none';
+      loggedInView.style.display = 'block';
+      document.getElementById('accountEmail').textContent = session.user.email;
+      loadMyListings(session.user.id);
+    } else {
+      loggedOutView.style.display = 'block';
+      loggedInView.style.display = 'none';
+    }
+  }
+
+  init();
+
+</script>
+
+</body>
+</html>

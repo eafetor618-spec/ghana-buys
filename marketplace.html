@@ -109,7 +109,9 @@
     let query = sb.from('listings').select('*').eq('status', 'active');
     if (currentCategory) query = query.eq('category', currentCategory);
     if (currentSearch) query = query.ilike('title', '%' + currentSearch + '%');
-    query = query.order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
+    query = query.order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
 
     try {
       const { data, error } = await query;
@@ -124,6 +126,7 @@
       }
 
       grid.insertAdjacentHTML('beforeend', data.map(listingCardHTML).join(''));
+      refreshSavedButtons();
       resultsCount.textContent = grid.children.length + (data.length === PAGE_SIZE ? '+' : '') + ' listing' + (grid.children.length === 1 ? '' : 's');
       loadMoreWrap.style.display = data.length === PAGE_SIZE ? 'block' : 'none';
       currentOffset = offset + data.length;

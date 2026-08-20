@@ -6,6 +6,53 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/* Paystack — public/test key only, safe to expose client-side.
+   Get this from Paystack dashboard -> Settings -> API Keys (pk_test_... or pk_live_...) */
+const PAYSTACK_PUBLIC_KEY = 'YOUR-PAYSTACK-PUBLIC-KEY';
+
+// Calls the feature-listing Supabase Edge Function, which holds the Paystack
+// SECRET key server-side and does the real verification. Never trust a
+// client-side "payment succeeded" signal on its own.
+async function callFeatureListingFn(action, payload) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Not logged in');
+  const res = await fetch(SUPABASE_URL + '/functions/v1/feature-listing', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + session.access_token
+    },
+    body: JSON.stringify(Object.assign({ action: action }, payload))
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// Opens the Paystack popup for a given listing, then verifies with the
+// server before resolving. Requires the Paystack Inline JS script
+// (https://js.paystack.co/v1/inline.js) to already be loaded on the page.
+function startFeatureListingCheckout(listingId, onSuccess, onError) {
+  callFeatureListingFn('initialize', { listing_id: listingId })
+    .then(function (init) {
+      const handler = PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: init.email,
+        amount: init.amount,
+        currency: 'GHS',
+        ref: init.reference,
+        callback: function () {
+          callFeatureListingFn('verify', { reference: init.reference })
+            .then(function (result) { onSuccess(result); })
+            .catch(function (err) { onError(err); });
+        },
+        onClose: function () {}
+      });
+      handler.openIframe();
+    })
+    .catch(function (err) { onError(err); });
+}
+
 const CATEGORIES = [
   'Phones & Electronics',
   'Fashion',
@@ -70,12 +117,17 @@ function listingCardHTML(l) {
     ? '<img src="' + escapeHtml(l.image_url) + '" alt="' + escapeHtml(l.title) + '">'
     : placeholderIconSVG();
   const soldBadge = l.status === 'sold' ? '<span class="listing-sold-badge">Sold</span>' : '';
+  const isFeatured = l.featured && l.featured_until && new Date(l.featured_until) > new Date();
+  const featuredBadge = isFeatured ? '<span class="listing-featured-badge">★ Featured</span>' : '';
 
   return (
     '<a class="listing-card" href="/listing?id=' + l.id + '">' +
       '<div class="listing-thumb-wrap">' +
         '<div class="listing-thumb">' + img + '</div>' +
-        soldBadge +
+        soldBadge + featuredBadge +
+        '<button type="button" class="save-btn" data-id="' + l.id + '" aria-label="Save listing">' +
+          '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 21s-7.5-4.6-10-9C.5 8.5 2 4.5 6 4c2.2-.3 4 1 6 3.2C14 5 15.8 3.7 18 4c4 .5 5.5 4.5 4 8-2.5 4.4-10 9-10 9z"/></svg>' +
+        '</button>' +
       '</div>' +
       '<div class="listing-body">' +
         '<span class="listing-price">' + formatPrice(l.price) + '</span>' +
@@ -88,6 +140,51 @@ function listingCardHTML(l) {
     '</a>'
   );
 }
+
+// Marks every .save-btn currently in the DOM whose listing is already saved
+// by the signed-in viewer. Safe to call repeatedly (e.g. after each render);
+// no-ops quietly if the viewer isn't logged in.
+async function refreshSavedButtons() {
+  const buttons = document.querySelectorAll('.save-btn');
+  if (!buttons.length) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+
+  const { data, error } = await sb.from('saved_listings').select('listing_id').eq('user_id', session.user.id);
+  if (error || !data) return;
+  const savedIds = new Set(data.map(function (r) { return r.listing_id; }));
+  buttons.forEach(function (btn) {
+    btn.classList.toggle('saved', savedIds.has(btn.dataset.id));
+  });
+}
+
+async function toggleSaveListing(id, btn) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    window.location.href = '/account?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+
+  const alreadySaved = btn.classList.contains('saved');
+  btn.disabled = true;
+  if (alreadySaved) {
+    await sb.from('saved_listings').delete().eq('user_id', session.user.id).eq('listing_id', id);
+    btn.classList.remove('saved');
+  } else {
+    await sb.from('saved_listings').insert({ user_id: session.user.id, listing_id: id });
+    btn.classList.add('saved');
+  }
+  btn.disabled = false;
+}
+
+// Delegated so it works for cards rendered anywhere, at any time.
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.save-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  toggleSaveListing(btn.dataset.id, btn);
+});
 
 // Keeps the "Log in" / "My Account" nav link in sync with auth state on every page.
 (async function initNavAccountLink() {
