@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — Ghana Buys Marketplace</title>
+<meta name="description" content="Log in or sign up to Ghana Buys, and manage the items you've posted for sale.">
+<link rel="canonical" href="https://ghanabuys.com/account">
+<meta property="og:type" content="website">
+<meta name="robots" content="noindex">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .sales-badge{
+    display:inline-block; background:var(--red); color:#fff; font-family:'IBM Plex Mono',monospace;
+    font-size:0.7rem; font-weight:700; line-height:1; padding:3px 6px; border-radius:10px; margin-left:4px;
+  }
+  .sale-status-paid{color:var(--green);}
+  .sale-status-pending{color:var(--ink-soft);}
+  .sale-status-failed{color:var(--red);}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+</head>
+<body class="page-account">
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <a class="back" href="/marketplace">&larr; All listings</a>
+</nav>
+<div class="kente-bar"></div>
+
+<article class="wrap">
+
+  <div id="loggedOutView">
+    <span class="tag">Account</span>
+    <h1 class="title">Log in or sign up</h1>
+    <p class="lead">One free account to post listings, manage them, and get replies on WhatsApp.</p>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="tabLogin">Log in</button>
+      <button type="button" class="auth-tab" id="tabSignup">Sign up</button>
+    </div>
+
+    <form class="mp-form auth-panel active" id="loginPanel">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="form-submit" id="loginBtn">Log in</button>
+      <div class="form-status" id="loginStatus"></div>
+      <button type="button" class="forgot-password-link" id="forgotPasswordLink">Forgot password?</button>
+    </form>
+
+    <form class="mp-form auth-panel" id="resetRequestPanel">
+      <p class="lead" style="margin-bottom:16px;">Enter your email and we'll send you a link to reset your password.</p>
+      <div class="form-group">
+        <label for="resetEmail">Email</label>
+        <input type="email" id="resetEmail" required autocomplete="email">
+      </div>
+      <button type="submit" class="form-submit" id="resetRequestBtn">Send reset link</button>
+      <div class="form-status" id="resetRequestStatus"></div>
+      <button type="button" class="forgot-password-link" id="backToLoginLink">&larr; Back to log in</button>
+    </form>
+
+    <form class="mp-form auth-panel" id="resetPasswordPanel">
+      <p class="lead" style="margin-bottom:16px;">Choose a new password for your account.</p>
+      <div class="form-group">
+        <label for="newPassword">New password</label>
+        <input type="password" id="newPassword" required minlength="6" autocomplete="new-password">
+        <div class="hint">At least 6 characters.</div>
+      </div>
+      <button type="submit" class="form-submit" id="resetPasswordBtn">Set new password</button>
+      <div class="form-status" id="resetPasswordStatus"></div>
+    </form>
+
+    <form class="mp-form auth-panel" id="signupPanel">
+      <div class="form-group">
+        <label for="signupName">Your name</label>
+        <input type="text" id="signupName" required maxlength="60" placeholder="Shown on your listings">
+      </div>
+      <div class="form-group">
+        <label for="signupEmail">Email</label>
+        <input type="email" id="signupEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="signupPassword">Password</label>
+        <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
+        <div class="hint">At least 6 characters.</div>
+      </div>
+      <button type="submit" class="form-submit" id="signupBtn">Create account</button>
+      <div class="form-status" id="signupStatus"></div>
+    </form>
+  </div>
+
+  <div id="loggedInView" style="display:none;">
+    <div class="account-header">
+      <div>
+        <span class="tag">Account</span>
+        <h1 class="title">My listings</h1>
+        <div class="account-email" id="accountEmail"></div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <a class="btn-secondary" href="/post">+ New listing</a>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+
+    <div class="admin-tabs" style="margin-top:24px;">
+      <button type="button" class="auth-tab active" id="tabMyListings">My listings</button>
+      <button type="button" class="auth-tab" id="tabSaved">Cart</button>
+      <button type="button" class="auth-tab" id="tabAlerts">Alerts</button>
+      <button type="button" class="auth-tab" id="tabStore">My Store</button>
+      <button type="button" class="auth-tab" id="tabPayouts">Get Paid</button>
+      <button type="button" class="auth-tab" id="tabSales">Sales <span id="salesBadge" class="sales-badge" style="display:none;"></span></button>
+    </div>
+
+    <div id="myListings" style="margin-top:20px;">
+      <div class="empty-state"><h3>Loading your listings…</h3></div>
+    </div>
+    <div id="savedListings" style="margin-top:20px; display:none;"></div>
+    <div id="savedSearches" style="margin-top:20px; display:none;"></div>
+    <div id="myStore" style="margin-top:20px; display:none;"></div>
+    <div id="myPayouts" style="margin-top:20px; display:none;"></div>
+    <div id="mySales" style="margin-top:20px; display:none;"></div>
+
+    <div class="danger-zone">
+      <h3>Danger zone</h3>
+      <p>Permanently delete your account. This removes your listings, saved items, alerts, store, and payment history — it cannot be undone.</p>
+      <button type="button" class="danger-btn" id="deleteAccountBtn">Delete my account</button>
+    </div>
+  </div>
+
+</article>
+
+<div class="kente-bar"></div>
+<footer>
+  <div class="footer-inner">
+    <span>&copy; 2026 Ghana Buys</span>
+    <span>Ghana's marketplace — buy, sell, connect</span>
+    <a href="/marketplace" style="color:var(--ink-soft);">Browse Listings</a>
+    <a href="/privacy" style="color:var(--ink-soft);">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="/marketplace.js"></script>
+<script>
+
+  const loggedOutView = document.getElementById('loggedOutView');
+  const loggedInView = document.getElementById('loggedInView');
+  const nextUrl = new URLSearchParams(location.search).get('next') || '/account';
+
+  // --- Tab switching ---
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const loginPanel = document.getElementById('loginPanel');
+  const signupPanel = document.getElementById('signupPanel');
+  const resetRequestPanel = document.getElementById('resetRequestPanel');
+  const resetPasswordPanel = document.getElementById('resetPasswordPanel');
+  const authTabs = document.querySelector('.auth-tabs');
+
+  function showAuthPanel(panel) {
+    [loginPanel, signupPanel, resetRequestPanel, resetPasswordPanel].forEach(function (p) {
+      p.classList.remove('active');
+    });
+    panel.classList.add('active');
+  }
+
+  tabLogin.addEventListener('click', function () {
+    tabLogin.classList.add('active'); tabSignup.classList.remove('active');
+    authTabs.style.display = '';
+    showAuthPanel(loginPanel);
+  });
+  tabSignup.addEventListener('click', function () {
+    tabSignup.classList.add('active'); tabLogin.classList.remove('active');
+    authTabs.style.display = '';
+    showAuthPanel(signupPanel);
+  });
+
+  document.getElementById('forgotPasswordLink').addEventListener('click', function () {
+    authTabs.style.display = 'none';
+    showAuthPanel(resetRequestPanel);
+  });
+  document.getElementById('backToLoginLink').addEventListener('click', function () {
+    authTabs.style.display = '';
+    tabLogin.classList.add('active'); tabSignup.classList.remove('active');
+    showAuthPanel(loginPanel);
+  });
+
+  // --- Request password reset email ---
+  document.getElementById('resetRequestPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('resetRequestBtn');
+    const statusEl = document.getElementById('resetRequestStatus');
+    const email = document.getElementById('resetEmail').value.trim();
+    btn.disabled = true; btn.textContent = 'Sending…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: location.origin + '/account'
+    });
+
+    btn.disabled = false; btn.textContent = 'Send reset link';
+    if (error) {
+      statusEl.textContent = error.message || 'Something went wrong.';
+      statusEl.className = 'form-status error';
+      return;
+    }
+    statusEl.textContent = 'Check your email for a reset link.';
+    statusEl.className = 'form-status success';
+  });
+
+  // --- Set new password (after clicking the emailed reset link) ---
+  // Supabase fires a PASSWORD_RECOVERY auth event when the user lands here
+  // via the link in their email, regardless of whether they were previously
+  // logged in on this device.
+  sb.auth.onAuthStateChange(function (event) {
+    if (event === 'PASSWORD_RECOVERY') {
+      authTabs.style.display = 'none';
+      loggedOutView.style.display = 'block';
+      loggedInView.style.display = 'none';
+      showAuthPanel(resetPasswordPanel);
+    }
+  });
+
+  document.getElementById('resetPasswordPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('resetPasswordBtn');
+    const statusEl = document.getElementById('resetPasswordStatus');
+    const newPassword = document.getElementById('newPassword').value;
+    btn.disabled = true; btn.textContent = 'Saving…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      statusEl.textContent = error.message || 'Something went wrong.';
+      statusEl.className = 'form-status error';
+      btn.disabled = false; btn.textContent = 'Set new password';
+      return;
+    }
+    statusEl.textContent = 'Password updated! Redirecting…';
+    statusEl.className = 'form-status success';
+    setTimeout(function () { window.location.href = '/account'; }, 1200);
+  });
+
+  // --- Login ---
+  document.getElementById('loginPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    const statusEl = document.getElementById('loginStatus');
+    btn.disabled = true; btn.textContent = 'Logging in…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    const { error } = await sb.auth.signInWithPassword({ email: email, password: password });
+    if (error) {
+      statusEl.textContent = error.message || 'Could not log in — check your details.';
+      statusEl.className = 'form-status error';
+      btn.disabled = false; btn.textContent = 'Log in';
+      return;
+    }
+    window.location.href = nextUrl;
+  });
+
+  // --- Sign up ---
+  document.getElementById('signupPanel').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('signupBtn');
+    const statusEl = document.getElementById('signupStatus');
+    btn.disabled = true; btn.textContent = 'Creating account…'; statusEl.textContent = ''; statusEl.className = 'form-status';
+
+    const name = document.getElementById('signupName').value.trim();
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+
+    const { data, error } = await sb.auth.signUp({
+      email: email,
+      password: password,
+      options: { data: { display_name: name } }
+    });
+
+    if (error) {
+      statusEl.textContent = error.message || 'Could not create your account.';
+      statusEl.className = 'form-status error';
+      btn.disabled = false; btn.textContent = 'Create account';
+      return;
+    }
+
+    if (data.session) {
+      window.location.href = nextUrl;
+    } else {
+      statusEl.textContent = 'Almost there — check your email to confirm your account, then log in.';
+      statusEl.className = 'form-status success';
+      btn.disabled = false; btn.textContent = 'Create account';
+    }
+  });
+
+  // --- Logout ---
+  document.getElementById('logoutBtn').addEventListener('click', async function () {
+    await sb.auth.signOut();
+    window.location.href = '/';
+  });
+
+  // --- Delete account ---
+  document.getElementById('deleteAccountBtn').addEventListener('click', function () {
+    const wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div class="modal-backdrop" id="deleteBackdrop">' +
+        '<div class="modal-box">' +
+          '<h3>Delete your account?</h3>' +
+          '<p style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:14px;">' +
+            'This permanently deletes your account and everything tied to it — listings, cart, alerts, store, payment history. ' +
+            '<strong>This cannot be undone.</strong>' +
+          '</p>' +
+          '<p style="font-size:0.9rem; margin-bottom:8px;">Type <strong>DELETE</strong> to confirm:</p>' +
+          '<input type="text" id="deleteConfirmInput" style="width:100%; padding:10px; border:1.5px solid var(--ink); border-radius:3px; font-family:inherit; font-size:0.95rem;">' +
+          '<div class="form-status" id="deleteStatus"></div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn-secondary" id="deleteCancel">Cancel</button>' +
+            '<button type="button" class="danger-btn" id="deleteConfirmBtn" disabled>Delete my account</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+
+    const backdrop = document.getElementById('deleteBackdrop');
+    const input = document.getElementById('deleteConfirmInput');
+    const confirmBtn = document.getElementById('deleteConfirmBtn');
+
+    function close() { wrap.remove(); }
+
+    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) close(); });
+    document.getElementById('deleteCancel').addEventListener('click', close);
+    input.addEventListener('input', function () {
+      confirmBtn.disabled = input.value.trim() !== 'DELETE';
+    });
+
+    confirmBtn.addEventListener('click', async function () {
+      const statusEl = document.getElementById('deleteStatus');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting…';
+      statusEl.textContent = '';
+      statusEl.className = 'form-status';
+
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const res = await fetch(SUPABASE_URL + '/functions/v1/delete-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+        await sb.auth.signOut();
+        window.location.href = '/';
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.className = 'form-status error';
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Delete my account';
+      }
+    });
+  });
+
+  // --- My listings dashboard ---
+  async function loadMyListings(userId) {
+    const wrap = document.getElementById('myListings');
+    try {
+      const { data, error } = await sb.from('listings').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        wrap.innerHTML = '<div class="empty-state"><h3>No listings yet</h3><p>Post your first item to see it here.</p></div>';
+        return;
+      }
+
+      wrap.innerHTML = data.map(function (l) {
+        const img = l.image_url ? '<img src="' + escapeHtml(l.image_url) + '" alt="">' : '';
+        const daysLeft = l.expires_at ? Math.ceil((new Date(l.expires_at) - new Date()) / 86400000) : null;
+        const expiryNote = l.status === 'active' && daysLeft !== null
+          ? (daysLeft <= 5
+              ? '<span class="expiry-note warn">Expires in ' + Math.max(daysLeft, 0) + ' day' + (daysLeft === 1 ? '' : 's') + '</span>'
+              : '<span class="expiry-note">Expires ' + formatDate(l.expires_at) + '</span>')
+          : '';
+
+        let actions = '<a class="action-btn" href="/listing?id=' + l.id + '">View</a>';
+        if (l.status === 'active' || l.status === 'expired') {
+          actions += '<a class="action-btn" href="/post?id=' + l.id + '">Edit</a>';
+        }
+        if (l.status === 'active') {
+          actions += '<button class="action-btn" data-action="sold" data-id="' + l.id + '">Mark sold</button>';
+          if (daysLeft !== null && daysLeft <= 5) {
+            actions += '<button class="action-btn" data-action="renew" data-id="' + l.id + '">Renew (+30 days)</button>';
+          }
+        }
+        if (l.status === 'sold' || l.status === 'expired') {
+          actions += '<button class="action-btn" data-action="relist" data-id="' + l.id + '">Relist</button>';
+        }
+        if (l.status === 'removed' || l.status === 'under_review') {
+          actions += '<span class="expiry-note">' + (l.status === 'under_review' ? 'Pending review' : 'Removed by moderation') + '</span>';
+        }
+        actions += '<button class="action-btn danger" data-action="delete" data-id="' + l.id + '">Delete</button>';
+
+        return (
+          '<div class="my-listing-row" data-id="' + l.id + '">' +
+            '<div class="my-listing-thumb">' + img + '</div>' +
+            '<div class="my-listing-info">' +
+              '<span class="status-badge ' + l.status + '">' + l.status + '</span>' +
+              expiryNote +
+              '<h4>' + escapeHtml(l.title) + '</h4>' +
+              '<span class="listing-price">' + formatPrice(l.price) + '</span>' +
+            '</div>' +
+            '<div class="my-listing-actions">' + actions + '</div>' +
+          '</div>'
+        );
+      }).join('');
+    } catch (err) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load your listings</h3><p>Refresh the page, or check back shortly.</p></div>';
+    }
+  }
+
+  document.getElementById('myListings').addEventListener('click', async function (e) {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+
+    if (btn.dataset.action === 'sold') {
+      btn.disabled = true; btn.textContent = 'Updating…';
+      await sb.from('listings').update({ status: 'sold' }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'renew') {
+      btn.disabled = true; btn.textContent = 'Renewing…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({ expires_at: newExpiry }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'relist') {
+      btn.disabled = true; btn.textContent = 'Relisting…';
+      const newExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+      await sb.from('listings').update({
+        status: 'active',
+        expires_at: newExpiry,
+        created_at: new Date().toISOString()
+      }).eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+
+    if (btn.dataset.action === 'delete') {
+      if (!confirm('Delete this listing? This can\'t be undone.')) return;
+      btn.disabled = true; btn.textContent = 'Deleting…';
+      await sb.from('listings').delete().eq('id', id);
+      const { data: { session } } = await sb.auth.getSession();
+      loadMyListings(session.user.id);
+    }
+  });
+
+  // --- Which view to show ---
+  // --- My listings / Saved tabs ---
+  document.getElementById('tabMyListings').addEventListener('click', function () {
+    setAccountTab('mine');
+  });
+  document.getElementById('tabSaved').addEventListener('click', function () {
+    setAccountTab('saved');
+  });
+  document.getElementById('tabAlerts').addEventListener('click', function () {
+    setAccountTab('alerts');
+  });
+  document.getElementById('tabStore').addEventListener('click', function () {
+    setAccountTab('store');
+  });
+  document.getElementById('tabPayouts').addEventListener('click', function () {
+    setAccountTab('payouts');
+  });
+  document.getElementById('tabSales').addEventListener('click', function () {
+    setAccountTab('sales');
+  });
+  function setAccountTab(which) {
+    document.getElementById('tabMyListings').classList.toggle('active', which === 'mine');
+    document.getElementById('tabSaved').classList.toggle('active', which === 'saved');
+    document.getElementById('tabAlerts').classList.toggle('active', which === 'alerts');
+    document.getElementById('tabStore').classList.toggle('active', which === 'store');
+    document.getElementById('tabPayouts').classList.toggle('active', which === 'payouts');
+    document.getElementById('tabSales').classList.toggle('active', which === 'sales');
+    document.getElementById('myListings').style.display = which === 'mine' ? '' : 'none';
+    document.getElementById('savedListings').style.display = which === 'saved' ? '' : 'none';
+    document.getElementById('savedSearches').style.display = which === 'alerts' ? '' : 'none';
+    document.getElementById('myStore').style.display = which === 'store' ? '' : 'none';
+    document.getElementById('myPayouts').style.display = which === 'payouts' ? '' : 'none';
+    document.getElementById('mySales').style.display = which === 'sales' ? '' : 'none';
+    if (which === 'saved') loadSavedListings();
+    if (which === 'alerts') loadSavedSearches();
+    if (which === 'store') loadMyStore();
+    if (which === 'payouts') loadPayoutsTab();
+    if (which === 'sales') loadMySales();
+  }
+
+  async function loadSavedListings() {
+    const wrap = document.getElementById('savedListings');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await sb
+      .from('saved_listings')
+      .select('listing_id, listings(*)')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load saved listings</h3><p>Refresh the page, or check back shortly.</p></div>';
+      return;
+    }
+
+    const listings = (data || []).map(function (r) { return r.listings; }).filter(Boolean);
+    if (!listings.length) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Your cart is empty</h3><p>Tap the cart icon on any listing to add it here.</p></div>';
+      return;
+    }
+
+    wrap.innerHTML = '<div class="listing-grid">' + listings.map(listingCardHTML).join('') + '</div>';
+    refreshSavedButtons();
+  }
+
+  async function loadSavedSearches() {
+    const wrap = document.getElementById('savedSearches');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await sb
+      .from('saved_searches')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load alerts</h3><p>Refresh the page, or check back shortly.</p></div>';
+      return;
+    }
+    if (!data || !data.length) {
+      wrap.innerHTML = '<div class="empty-state"><h3>No alerts set up</h3><p>On the marketplace page, filter by category or search, then tap "🔔 Alert me" to get emailed about new matches.</p></div>';
+      return;
+    }
+
+    wrap.innerHTML = data.map(function (s) {
+      const label = [s.category, s.keyword ? '"' + escapeHtml(s.keyword) + '"' : null].filter(Boolean).join(' — ') || 'All listings';
+      return (
+        '<div class="my-listing-row" data-id="' + s.id + '">' +
+          '<div class="my-listing-info">' +
+            '<h4>' + label + '</h4>' +
+            '<span class="expiry-note">Saved ' + formatDate(s.created_at) + '</span>' +
+          '</div>' +
+          '<div class="my-listing-actions">' +
+            '<button class="action-btn danger" data-action="delete-search" data-id="' + s.id + '">Delete</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  document.getElementById('savedSearches').addEventListener('click', async function (e) {
+    const btn = e.target.closest('button[data-action="delete-search"]');
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = 'Deleting…';
+    await sb.from('saved_searches').delete().eq('id', btn.dataset.id);
+    loadSavedSearches();
+  });
+
+  async function loadMyStore() {
+    const wrap = document.getElementById('myStore');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data: store } = await sb.from('stores').select('*').eq('user_id', session.user.id).maybeSingle();
+    renderStoreTab(store, session.user.id);
+  }
+
+  function renderStoreTab(store, userId) {
+    const wrap = document.getElementById('myStore');
+    const isActive = store && store.active && store.expires_at && new Date(store.expires_at) > new Date();
+
+    let subscribeSection = '';
+    if (store) {
+      subscribeSection = isActive
+        ? '<div class="callout"><strong>✓ Store subscription active</strong><p style="margin-top:4px;">Expires ' + formatDate(store.expires_at) + '. <a href="/store?id=' + store.id + '" target="_blank">View your public store page →</a></p>' +
+            '<button type="button" class="btn-secondary" id="renewStoreBtn" style="margin-top:12px;">Renew (+30 days) — ₵30</button></div>'
+        : '<div class="callout"><strong>Subscription ' + (store.expires_at ? 'expired' : 'not started') + '</strong><p style="margin-top:4px;">Subscribe to get a public store page listing all your items, with a verified badge on your listings.</p>' +
+            '<button type="button" class="btn-primary" id="subscribeStoreBtn" style="margin-top:12px;">Subscribe — ₵30/month</button></div>';
+    }
+
+    wrap.innerHTML =
+      '<form id="storeForm">' +
+        '<div class="form-group"><label>Store name</label>' +
+        '<input type="text" id="storeName" required placeholder="e.g. Kofi\'s Electronics" value="' + (store ? escapeHtml(store.name) : '') + '"></div>' +
+        '<div class="form-group"><label>Description</label>' +
+        '<textarea id="storeDesc" rows="3" placeholder="What do you sell? What makes your store trustworthy?">' + (store ? escapeHtml(store.description || '') : '') + '</textarea></div>' +
+        '<div class="form-group"><label>WhatsApp number</label>' +
+        '<input type="text" id="storeWhatsapp" placeholder="e.g. 024 123 4567" value="' + (store ? escapeHtml(store.whatsapp || '') : '') + '"></div>' +
+        '<button type="submit" class="btn-primary" style="margin-top:4px;">' + (store ? 'Save changes' : 'Create store profile') + '</button>' +
+        '<div class="form-status" id="storeFormStatus"></div>' +
+      '</form>' +
+      '<div style="margin-top:20px;">' + subscribeSection + '</div>';
+
+    document.getElementById('storeForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const statusEl = document.getElementById('storeFormStatus');
+      const payload = {
+        user_id: userId,
+        name: document.getElementById('storeName').value.trim(),
+        description: document.getElementById('storeDesc').value.trim() || null,
+        whatsapp: document.getElementById('storeWhatsapp').value.trim() || null
+      };
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+
+      const { error } = store
+        ? await sb.from('stores').update(payload).eq('id', store.id)
+        : await sb.from('stores').insert(payload);
+
+      btn.disabled = false;
+      if (error) {
+        statusEl.textContent = 'Something went wrong: ' + error.message;
+        statusEl.className = 'form-status error';
+        return;
+      }
+      statusEl.textContent = 'Saved!';
+      statusEl.className = 'form-status success';
+      loadMyStore();
+    });
+
+    const subBtn = document.getElementById('subscribeStoreBtn') || document.getElementById('renewStoreBtn');
+    if (subBtn) {
+      subBtn.addEventListener('click', function () {
+        subBtn.disabled = true;
+        subBtn.textContent = 'Opening payment…';
+        startStoreSubscriptionCheckout(
+          function () {
+            subBtn.textContent = 'Subscribed! Refreshing…';
+            setTimeout(loadMyStore, 1200);
+          },
+          function (err) {
+            alert('Payment failed: ' + (err.message || 'please try again.'));
+            subBtn.disabled = false;
+            subBtn.textContent = isActive ? 'Renew (+30 days) — ₵30' : 'Subscribe — ₵30/month';
+          }
+        );
+      });
+    }
+  }
+
+  // --- Sales tab: orders where this user is the seller ---
+  async function loadMySales() {
+    const wrap = document.getElementById('mySales');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading your sales…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await sb
+      .from('listing_orders')
+      .select('id, reference, amount_pesewas, status, created_at, listings(id, title, image_url)')
+      .eq('seller_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      wrap.innerHTML = '<div class="empty-state"><h3>Couldn\'t load your sales</h3><p>Refresh the page, or check back shortly.</p></div>';
+      return;
+    }
+
+    const orders = data || [];
+    if (!orders.length) {
+      wrap.innerHTML = '<div class="empty-state"><h3>No sales yet</h3><p>When a buyer pays through one of your listings, it\'ll show up here.</p></div>';
+      return;
+    }
+
+    const statusLabel = { paid: '✓ Paid', pending: 'Awaiting payment', failed: 'Payment failed' };
+    const statusClass = { paid: 'sale-status-paid', pending: 'sale-status-pending', failed: 'sale-status-failed' };
+
+    wrap.innerHTML = orders.map(function (o) {
+      const listing = o.listings || {};
+      const img = listing.image_url ? '<img src="' + escapeHtml(listing.image_url) + '" alt="">' : '';
+      const title = listing.title ? escapeHtml(listing.title) : 'Listing removed';
+      const amount = formatPrice(o.amount_pesewas / 100);
+      const when = new Date(o.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const label = statusLabel[o.status] || o.status;
+      const cls = statusClass[o.status] || '';
+      const viewLink = listing.id ? '<a class="action-btn" href="/listing?id=' + listing.id + '">View listing</a>' : '';
+
+      return (
+        '<div class="my-listing-row" data-id="' + o.id + '">' +
+          '<div class="my-listing-thumb">' + img + '</div>' +
+          '<div class="my-listing-info">' +
+            '<h4>' + title + '</h4>' +
+            '<span class="listing-price">' + amount + '</span>' +
+            '<div class="' + cls + '" style="margin-top:4px; font-size:0.85rem; font-weight:600;">' + label + ' &middot; ' + when + '</div>' +
+          '</div>' +
+          '<div class="my-listing-actions">' + viewLink + '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    updateSalesBadge(orders);
+  }
+
+  function updateSalesBadge(orders) {
+    const badge = document.getElementById('salesBadge');
+    const paidCount = orders.filter(function (o) { return o.status === 'paid'; }).length;
+    if (paidCount > 0) {
+      badge.textContent = paidCount;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  // Populate the badge count on page load, without switching tabs
+  (async function primeSalesBadge() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+    const { data } = await sb
+      .from('listing_orders')
+      .select('status')
+      .eq('seller_id', session.user.id);
+    if (data) updateSalesBadge(data);
+  })();
+
+  async function loadPayoutsTab() {
+    const wrap = document.getElementById('myPayouts');
+    wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data: profile } = await sb.from('profiles').select('paystack_subaccount_code, payout_network, payout_account_number, payout_account_name').eq('id', session.user.id).maybeSingle();
+
+    if (profile && profile.paystack_subaccount_code) {
+      wrap.innerHTML =
+        '<div class="callout"><strong>✓ Ready to receive verified payments</strong>' +
+          '<p style="margin-top:8px;">' + escapeHtml(profile.payout_network) + ' — ' + escapeHtml(profile.payout_account_number) + '<br>' +
+          'Registered to: ' + escapeHtml(profile.payout_account_name) + '</p>' +
+          '<p style="margin-top:10px; font-size:0.85rem; color:var(--ink-soft);">Buyers can now pay instantly through your listings via Paystack — money settles directly to this account. Ghana Buys never holds or touches it.</p>' +
+        '</div>';
+      return;
+    }
+
+    wrap.innerHTML =
+      '<p class="lead" style="margin-bottom:16px;">Set this up once to let buyers pay you instantly through your listings — verified by Paystack, settled straight to your Mobile Money account. Ghana Buys never holds your money.</p>' +
+      '<form id="payoutForm">' +
+        '<div class="form-group"><label>Network</label><select id="payoutNetwork" required><option value="">Loading networks…</option></select></div>' +
+        '<div class="form-group"><label>Mobile Money number</label><input type="tel" id="payoutNumber" required placeholder="e.g. 024 123 4567"></div>' +
+        '<div class="form-group"><label>Name on the account</label><input type="text" id="payoutAccountName" required placeholder="Full registered name"></div>' +
+        '<button type="submit" class="btn-primary" id="payoutSubmitBtn">Set up payouts</button>' +
+        '<div class="form-status" id="payoutStatus"></div>' +
+      '</form>';
+
+    try {
+      const { data: { session: s2 } } = await sb.auth.getSession();
+      const res = await fetch(SUPABASE_URL + '/functions/v1/paystack-subaccount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s2.access_token },
+        body: JSON.stringify({ action: 'list_momo_networks' })
+      });
+      const data = await res.json();
+      const select = document.getElementById('payoutNetwork');
+      if (res.ok && data.networks && data.networks.length) {
+        select.innerHTML = '<option value="">Choose network…</option>' + data.networks.map(function (n) {
+          return '<option value="' + escapeHtml(n.code) + '" data-name="' + escapeHtml(n.name) + '">' + escapeHtml(n.name) + '</option>';
+        }).join('');
+      } else {
+        select.innerHTML = '<option value="">Couldn\'t load networks — refresh to retry</option>';
+      }
+    } catch (e) {
+      document.getElementById('payoutNetwork').innerHTML = '<option value="">Couldn\'t load networks — refresh to retry</option>';
+    }
+
+    document.getElementById('payoutForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const statusEl = document.getElementById('payoutStatus');
+      const btn = document.getElementById('payoutSubmitBtn');
+      const select = document.getElementById('payoutNetwork');
+      const networkCode = select.value;
+      const networkName = select.options[select.selectedIndex] ? select.options[select.selectedIndex].dataset.name : '';
+      const accountNumber = document.getElementById('payoutNumber').value.trim();
+      const accountName = document.getElementById('payoutAccountName').value.trim();
+
+      if (!networkCode) {
+        statusEl.textContent = 'Please choose a network.';
+        statusEl.className = 'form-status error';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Verifying with Paystack…';
+      statusEl.textContent = '';
+      statusEl.className = 'form-status';
+
+      try {
+        const { data: { session: s3 } } = await sb.auth.getSession();
+        const res = await fetch(SUPABASE_URL + '/functions/v1/paystack-subaccount', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s3.access_token },
+          body: JSON.stringify({
+            action: 'create_subaccount',
+            network_code: networkCode,
+            network_name: networkName,
+            account_number: accountNumber,
+            account_name: accountName
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Something went wrong');
+
+        statusEl.textContent = 'Set up! Confirmed as: ' + data.resolved_name;
+        statusEl.className = 'form-status success';
+        setTimeout(loadPayoutsTab, 1200);
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.className = 'form-status error';
+        btn.disabled = false;
+        btn.textContent = 'Set up payouts';
+      }
+    });
+  }
+
+  async function init() {
+    // A password-recovery link lands here with #...type=recovery in the URL.
+    // Supabase still creates a real session in that case, so without this
+    // check init() would see "logged in" and show the normal dashboard,
+    // silently overriding the reset-password form shown by the
+    // PASSWORD_RECOVERY handler above.
+    if (location.hash.includes('type=recovery')) return;
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (session && session.user) {
+      loggedOutView.style.display = 'none';
+      loggedInView.style.display = 'block';
+      document.getElementById('accountEmail').textContent = session.user.email;
+      loadMyListings(session.user.id);
+    } else {
+      loggedOutView.style.display = 'block';
+      loggedInView.style.display = 'none';
+    }
+  }
+
+  init();
+
+</script>
+
+</body>
+</html>
