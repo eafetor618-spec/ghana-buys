@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+  // A password-reset link should land on /account, but if Supabase's Auth
+  // settings ever fall back to the site root instead, catch it here — before
+  // anything else on the page runs, so the token in the URL never gets
+  // silently consumed/cleared before we can hand it off correctly.
+  if (location.hash.indexOf('type=recovery') !== -1) {
+    location.replace('/account' + location.hash);
+  }
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghana Buys — Buy, Sell, and Connect in Ghana</title>
+<meta name="description" content="Ghana's own marketplace — browse listings from real sellers, post an item in minutes, and connect directly over WhatsApp. Plus honest buying guides.">
+<link rel="canonical" href="https://ghanabuys.com/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Ghana Buys — Buy, Sell, and Connect in Ghana">
+<meta property="og:description" content="Ghana's own marketplace — browse listings from real sellers, post an item in minutes, and connect directly over WhatsApp.">
+<meta property="og:url" content="https://ghanabuys.com/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="page-home">
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="icon-phone" viewBox="0 0 24 24">
+    <rect x="6" y="2" width="12" height="20" rx="2.2"></rect>
+    <line x1="10" y1="4.3" x2="14" y2="4.3"></line>
+    <circle class="icon-fill" cx="12" cy="19" r="0.9"></circle>
+  </symbol>
+  <symbol id="icon-powerbank" viewBox="0 0 24 24">
+    <rect x="5" y="4" width="14" height="17" rx="2.2"></rect>
+    <rect x="9.5" y="1.4" width="5" height="2.6" rx="0.6"></rect>
+    <polygon class="icon-fill" points="13.2,7.5 8.8,13.2 11.6,13.2 10.6,17.2 15.2,11 12.4,11"></polygon>
+  </symbol>
+  <symbol id="icon-store" viewBox="0 0 24 24">
+    <path d="M3.5 8.5 L4.6 3.5 H19.4 L20.5 8.5 Z"></path>
+    <path d="M3.5 8.5 A2.4 2.4 0 0 0 8.3 8.5 A2.4 2.4 0 0 0 13.1 8.5 A2.4 2.4 0 0 0 17.9 8.5 A2.4 2.4 0 0 0 20.5 8.5"></path>
+    <path d="M5 8.8 V20.5 H19 V8.8"></path>
+    <rect x="10" y="14" width="4" height="6.5"></rect>
+  </symbol>
+  <symbol id="icon-hanger" viewBox="0 0 24 24">
+    <circle cx="12" cy="4" r="1.4"></circle>
+    <path d="M12 5.4 V7.2"></path>
+    <path d="M12 7.2 L4 14.2 Q3 15 4.2 15.6 L12 12.2 L19.8 15.6 Q21 15 20 14.2 Z"></path>
+    <line x1="4.5" y1="18.2" x2="19.5" y2="18.2"></line>
+  </symbol>
+  <symbol id="icon-signal" viewBox="0 0 24 24">
+    <path d="M4.5 12.5 A10.8 10.8 0 0 1 19.5 12.5"></path>
+    <path d="M7.6 15.6 A6.4 6.4 0 0 1 16.4 15.6"></path>
+    <circle class="icon-fill" cx="12" cy="19.3" r="1.4"></circle>
+  </symbol>
+</svg>
+
+
+
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <div class="navlinks">
+    <a href="/marketplace">Browse</a>
+    <a href="#guides">Guides</a>
+    <a href="#about">About</a>
+  </div>
+  <div class="nav-actions">
+    <a class="nav-sell" href="/post">+ Sell</a>
+    <a class="nav-account" href="/account" id="navAccountLink">Log in</a>
+  </div>
+</nav>
+<div class="kente-bar"></div>
+
+<header class="hero">
+  <div class="eyebrow">● Buy · Sell · Connect</div>
+  <h1>Ghana's own marketplace, <span>built on trust.</span></h1>
+  <p>Browse real listings from real people, post an item in a couple of minutes, and connect straight over WhatsApp — no middlemen, no faceless checkout. Still can't decide what to buy? Our honest guides can help with that too.</p>
+  <div class="hero-ctas">
+    <a class="btn-primary" href="/marketplace">Browse listings</a>
+    <a class="btn-secondary" href="/post">Post an item — it's free</a>
+  </div>
+</header>
+
+<section class="section wrap">
+  <div class="cat-rail">
+    <a class="cat-chip" href="/marketplace?category=Phones%20%26%20Electronics">Phones &amp; Electronics</a>
+    <a class="cat-chip" href="/marketplace?category=Fashion">Fashion</a>
+    <a class="cat-chip" href="/marketplace?category=Home%20%26%20Living">Home &amp; Living</a>
+    <a class="cat-chip" href="/marketplace?category=Vehicles">Vehicles</a>
+    <a class="cat-chip" href="/marketplace?category=Property">Property</a>
+    <a class="cat-chip" href="/marketplace?category=Services">Services</a>
+    <a class="cat-chip" href="/marketplace?category=Data%20%26%20Connectivity">Data &amp; Connectivity</a>
+    <a class="cat-chip" href="/marketplace?category=Other">Other</a>
+  </div>
+</section>
+
+<section class="section wrap">
+  <div class="section-title">
+    <h2>Recently listed</h2>
+    <span><a href="/marketplace" style="color:var(--ink-soft);">See all →</a></span>
+  </div>
+  <div class="listing-grid" id="recentListings">
+    <div class="empty-state" style="grid-column:1/-1;"><h3>Loading listings…</h3></div>
+  </div>
+</section>
+
+<section class="section wrap" id="guides">
+  <div class="section-title">
+    <h2>Not sure what to buy? Start here</h2>
+    <span>5 guides</span>
+  </div>
+  <div class="guides">
+    <a class="guide-card" href="/phones">
+      <span class="guide-tag">Phones</span>
+      <h3>Best Smartphones Under ₵3,000 in Ghana</h3>
+      <p>Real picks from itel, Infinix, Tecno and Samsung — with honest trade-offs, not just spec sheets.</p>
+      <div class="guide-meta"><span>8 min read</span><span>7 phones compared</span></div>
+    </a>
+    <a class="guide-card" href="/stores">
+      <span class="guide-tag">Shopping</span>
+      <h3>Best Online Stores to Shop From in Ghana</h3>
+      <p>Jumia vs the smaller players — delivery speed, prices, and who actually refunds you.</p>
+      <div class="guide-meta"><span>6 min read</span><span>8 stores compared</span></div>
+    </a>
+    <a class="guide-card" href="/powerbanks">
+      <span class="guide-tag">Accessories</span>
+      <h3>Best Power Banks in Ghana for Dumsor</h3>
+      <p>What capacity you actually need, fast-charging explained, and how to avoid counterfeits.</p>
+      <div class="guide-meta"><span>7 min read</span><span>4 power banks compared</span></div>
+    </a>
+    <a class="guide-card" href="/clothes">
+      <span class="guide-tag">Fashion</span>
+      <h3>Best Places to Buy Clothes in Ghana</h3>
+      <p>Fast fashion, secondhand markets, custom tailoring and international brands compared.</p>
+      <div class="guide-meta"><span>7 min read</span><span>4 options compared</span></div>
+    </a>
+    <a class="guide-card" href="/databundles">
+      <span class="guide-tag">Connectivity</span>
+      <h3>Best Data Bundles in Ghana</h3>
+      <p>MTN vs Telecel vs AT — what the merger actually changed, and how to stop losing money to auto-renewal.</p>
+      <div class="guide-meta"><span>6 min read</span><span>3 networks compared</span></div>
+    </a>
+  </div>
+</section>
+
+<section class="section wrap" id="about">
+  <div class="section-title"><h2>About this site</h2></div>
+  <p style="max-width:56ch; color:var(--ink-soft); margin-bottom:24px;">Ghana Buys started as a one-person buying-guides project and has grown into a small marketplace for it — a place to buy and sell directly with people in Ghana, backed by the same no-nonsense approach: no fake listings, no hidden fees, nothing sponsored. Curious how our guides get made? Read <a href="/methodology" style="color:var(--green);">how we pick</a>.</p>
+  <div class="disclosure">
+    <strong>Affiliate disclosure:</strong> Some guide links on this site are affiliate links. If you buy through them, we may earn a small commission at no extra cost to you. Marketplace listings are posted directly by buyers and sellers — Ghana Buys isn't a party to those trades and doesn't handle payment, so trade carefully and meet safely.
+  </div>
+  <div class="newsletter">
+    <h2>Get new guides before everyone else</h2>
+    <p>One email when we publish a new guide or refresh prices. No spam, unsubscribe any time.</p>
+    <form class="newsletter-form">
+      <input type="email" required placeholder="you@email.com" aria-label="Email address">
+      <button type="submit">Join</button>
+    </form>
+    <div class="newsletter-status" role="status"></div>
+    <div class="newsletter-note">We store only your email address. See our <a href="/privacy" style="color:#fff;">Privacy Policy</a>.</div>
+  </div>
+</section>
+
+<div class="kente-bar"></div>
+<footer>
+  <div class="footer-inner">
+    <span>&copy; 2026 Ghana Buys</span>
+    <span>Ghana's marketplace — buy, sell, connect</span>
+    <a href="/marketplace" style="color:var(--ink-soft);">Browse Listings</a>
+    <a href="/post" style="color:var(--ink-soft);">Post an Item</a>
+    <a href="/methodology" style="color:var(--ink-soft);">How We Pick</a>
+    <a href="/privacy" style="color:var(--ink-soft);">Privacy Policy</a>
+  </div>
+</footer>
+
+<script src="/marketplace.js"></script>
+<script>
+
+  // Recently listed — pulls the newest 6 active listings straight from Supabase.
+  (async function loadRecentListings() {
+    const grid = document.getElementById('recentListings');
+    try {
+      const { data, error } = await sb
+        .from('listings')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>No listings yet</h3><p>Be the first to post something.</p></div>';
+        return;
+      }
+
+      grid.innerHTML = data.map(listingCardHTML).join('');
+      refreshSavedButtons();
+    } catch (err) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>Couldn\'t load listings</h3><p>Refresh the page, or check back shortly.</p></div>';
+    }
+  })();
+
+  // Newsletter signup — writes directly to Supabase (subscribers table, insert-only for anon).
+  document.querySelectorAll('.newsletter-form').forEach(function (form) {
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const input = form.querySelector('input[type=email]');
+      const btn = form.querySelector('button');
+      const statusEl = form.parentElement.querySelector('.newsletter-status');
+      const email = input.value.trim();
+      if (!email) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Joining…';
+      statusEl.textContent = '';
+
+      try {
+        const res = await fetch(SUPABASE_URL + '/rest/v1/subscribers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ email: email, source: location.hash || '#' })
+        });
+
+        if (res.ok) {
+          statusEl.textContent = "You're in — we'll only email when there's a guide worth reading.";
+          form.reset();
+        } else if (res.status === 409) {
+          statusEl.textContent = "That email's already subscribed.";
+        } else {
+          statusEl.textContent = 'Something went wrong — try again in a moment.';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Something went wrong — try again in a moment.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Join';
+      }
+    });
+  });
+
+</script>
+
+</body>
+</html>
