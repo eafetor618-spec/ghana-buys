@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Post an Item — Ghana Buys Marketplace</title>
-<meta name="description" content="Post an item for sale on Ghana Buys — free, takes a couple of minutes, buyers reach you directly on WhatsApp.">
+<meta name="description" content="Post an item for sale on Ghana Buys — just ₵5, takes a couple of minutes, buyers reach you directly on WhatsApp.">
 <link rel="canonical" href="https://ghanabuys.com/post">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Post an Item — Ghana Buys Marketplace">
-<meta property="og:description" content="Post an item for sale on Ghana Buys — free, buyers reach you directly on WhatsApp.">
+<meta property="og:description" content="Post an item for sale on Ghana Buys — just ₵5, buyers reach you directly on WhatsApp.">
 <meta property="og:url" content="https://ghanabuys.com/post">
 <meta name="twitter:card" content="summary">
 <meta name="robots" content="noindex">
@@ -30,7 +30,7 @@
   <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span class="crumb-sep">/</span><a href="/marketplace">Marketplace</a><span class="crumb-sep">/</span><span aria-current="page" id="crumbLabel">Post an Item</span></nav>
   <span class="tag">Sell</span>
   <h1 class="title" id="pageHeading">Post an item</h1>
-  <p class="lead">Free to post. Buyers will see your listing on the marketplace and message you directly on WhatsApp — nothing routes through us.</p>
+  <p class="lead">₵5 to post via Mobile Money. Buyers will see your listing on the marketplace and message you directly on WhatsApp — nothing routes through us.</p>
 
   <div id="gate">
     <div class="auth-required">
@@ -125,7 +125,7 @@
       <div class="file-preview" id="filePreview"><img id="filePreviewImg" alt=""></div>
     </div>
 
-    <button type="submit" class="form-submit" id="submitBtn">Post listing</button>
+    <button type="submit" class="form-submit" id="submitBtn">Continue to payment — ₵5</button>
     <div class="form-status" id="formStatus"></div>
   </form>
 </article>
@@ -297,16 +297,18 @@
         payload.seller_name = currentUser.user_metadata && currentUser.user_metadata.display_name
           ? currentUser.user_metadata.display_name
           : currentUser.email.split('@')[0];
-        payload.status = 'active';
+        // New listings aren't public until the ₵5 posting fee is confirmed —
+        // see the payment step this redirects to.
+        payload.status = 'pending_payment';
         const { data, error } = await sb.from('listings').insert(payload).select().single();
         if (error) throw error;
-        window.location.href = '/listing?id=' + data.id;
+        window.location.href = '/post-payment?id=' + data.id;
       }
     } catch (err) {
       statusEl.textContent = 'Something went wrong: ' + (err.message || 'please try again.');
       statusEl.className = 'form-status error';
       submitBtn.disabled = false;
-      submitBtn.textContent = editId ? 'Save changes' : 'Post listing';
+      submitBtn.textContent = editId ? 'Save changes' : 'Continue to payment — ₵5';
     }
   });
 

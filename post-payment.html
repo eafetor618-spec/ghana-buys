@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complete Your Listing — Ghana Buys Marketplace</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="page-post">
+
+<nav>
+  <a class="brand" href="/"><img class="logo-mark" src="/logo-icon.png" alt="Ghana Buys">Ghana Buys</a>
+  <a class="back" href="/account">&larr; My account</a>
+</nav>
+<div class="kente-bar"></div>
+
+<article class="wrap">
+  <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span class="crumb-sep">/</span><a href="/account">My account</a><span class="crumb-sep">/</span><span aria-current="page">Complete your listing</span></nav>
+  <span class="tag">Almost there</span>
+  <h1 class="title">One last step</h1>
+  <p class="lead">Your listing details are saved — it just needs the ₵5 posting fee confirmed before it goes live for buyers to see.</p>
+
+  <div id="content"><div class="empty-state"><h3>Loading…</h3></div></div>
+</article>
+
+<script src="/marketplace.js"></script>
+<script>
+
+  const listingId = new URLSearchParams(location.search).get('id');
+  const content = document.getElementById('content');
+
+  function starString(rating) {
+    return '★★★★★'.slice(0, rating) + '☆☆☆☆☆'.slice(0, 5 - rating);
+  }
+
+  async function init() {
+    if (!listingId) {
+      content.innerHTML = '<div class="empty-state"><h3>Listing not found</h3></div>';
+      return;
+    }
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      window.location.href = '/account?next=/post-payment?id=' + listingId;
+      return;
+    }
+
+    const { data: listing, error } = await sb.from('listings').select('id, title, status, user_id').eq('id', listingId).maybeSingle();
+    if (error || !listing) {
+      content.innerHTML = '<div class="empty-state"><h3>Listing not found</h3></div>';
+      return;
+    }
+    if (listing.user_id !== session.user.id) {
+      content.innerHTML = '<div class="empty-state"><h3>This isn\'t your listing</h3></div>';
+      return;
+    }
+
+    if (listing.status === 'active') {
+      content.innerHTML =
+        '<div class="callout"><strong>✓ Already live</strong>' +
+          '<p style="margin-top:8px;">This listing is already published.</p>' +
+          '<a class="btn-primary" href="/listing?id=' + listing.id + '" style="margin-top:10px; display:inline-block;">View listing</a>' +
+        '</div>';
+      return;
+    }
+
+    const { data: existingRequest } = await sb
+      .from('listing_post_requests')
+      .select('status')
+      .eq('listing_id', listing.id)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingRequest) {
+      content.innerHTML =
+        '<div class="callout"><strong>Payment submitted — under review</strong>' +
+          '<p style="margin-top:8px; font-size:0.9rem;">We\'re confirming your ₵5 payment. Your listing "' + escapeHtml(listing.title) + '" will go live shortly after we check it — you\'ll get an email either way.</p>' +
+        '</div>';
+      return;
+    }
+
+    const { data: settingsRows } = await sb
+      .from('site_settings')
+      .select('key, value')
+      .in('key', ['feature_momo_number', 'feature_momo_name', 'feature_momo_network']);
+    const settings = {};
+    (settingsRows || []).forEach(function (s) { settings[s.key] = s.value; });
+
+    content.innerHTML =
+      '<div class="momo-box">' +
+        '<strong>💳 Post "' + escapeHtml(listing.title) + '" for ₵5</strong>' +
+        '<p style="margin:6px 0 12px;">Send ₵5 via Mobile Money to publish this listing. (Card payments are being set up with our payment processor — Mobile Money works right now.)</p>' +
+        (settings.feature_momo_network ? '<div class="momo-networks"><span class="momo-network-badge">' + escapeHtml(settings.feature_momo_network) + '</span></div>' : '') +
+        '<div class="momo-details">' +
+          '<div><span class="momo-label">Number</span><span class="momo-value" id="postMomoNumberValue">' + escapeHtml(settings.feature_momo_number || '') + '</span></div>' +
+          '<div><span class="momo-label">Name</span><span class="momo-value">' + escapeHtml(settings.feature_momo_name || '') + '</span></div>' +
+        '</div>' +
+        '<button type="button" class="momo-pay-btn" id="postMomoPayBtn">Copy Mobile Money number</button>' +
+        '<button type="button" class="btn-primary" id="postSubmitBtn" style="margin-top:10px;">I\'ve sent ₵5 — submit for review</button>' +
+        '<p class="momo-warning">⚠️ Only click submit after you\'ve actually sent the ₵5 — we check manually before publishing.</p>' +
+        '<div class="form-status" id="postSubmitStatus"></div>' +
+      '</div>';
+
+    document.getElementById('postMomoPayBtn').addEventListener('click', function () {
+      const btn = this;
+      navigator.clipboard.writeText(settings.feature_momo_number || '').then(function () {
+        btn.textContent = 'Copied!';
+        setTimeout(function () { btn.textContent = 'Copy Mobile Money number'; }, 1500);
+      });
+    });
+
+    document.getElementById('postSubmitBtn').addEventListener('click', async function () {
+      const btn = this;
+      const statusEl = document.getElementById('postSubmitStatus');
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+
+      const { error: insertErr } = await sb.from('listing_post_requests').insert({
+        listing_id: listing.id,
+        user_id: session.user.id,
+      });
+
+      if (insertErr) {
+        statusEl.textContent = "Couldn't submit — please try again.";
+        statusEl.className = 'form-status error';
+        btn.disabled = false;
+        btn.textContent = "I've sent ₵5 — submit for review";
+        return;
+      }
+
+      init();
+    });
+  }
+
+  init();
+</script>
+</body>
+</html>
