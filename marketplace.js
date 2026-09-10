@@ -1,4 +1,4 @@
-l/* Ghana Buys — shared marketplace helpers, loaded by every page.
+/* Ghana Buys — shared marketplace helpers, loaded by every page.
    TODO: replace these two placeholders with your actual Supabase project
    values (Project Settings → API → Project URL / anon public key). */
 const SUPABASE_URL = 'https://wstjabsjsxwbkbiouyug.supabase.co';
@@ -116,25 +116,6 @@ async function sendMessage(recipientId, listingId, content) {
     listing_id: listingId || null,
     sender_name: senderName,
     content: trimmed
-  });
-  if (error) throw error;
-}
-
-// Reviews: insert a rating (1-5) + optional comment for a seller. listingId
-// is optional context (ties the review to a specific transaction); pass
-// null for a general seller review from the store page.
-async function submitReview(sellerId, listingId, rating, comment) {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) throw new Error('Not logged in');
-  if (sellerId === session.user.id) throw new Error("You can't review yourself.");
-  const ratingNum = Number(rating);
-  if (!ratingNum || ratingNum < 1 || ratingNum > 5) throw new Error('Please choose a star rating.');
-  const { error } = await sb.from('reviews').insert({
-    seller_id: sellerId,
-    reviewer_id: session.user.id,
-    listing_id: listingId || null,
-    rating: ratingNum,
-    comment: (comment || '').trim() || null
   });
   if (error) throw error;
 }
