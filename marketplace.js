@@ -1,4 +1,4 @@
-/* Ghana Buys — shared marketplace helpers, loaded by every page.
+l/* Ghana Buys — shared marketplace helpers, loaded by every page.
    TODO: replace these two placeholders with your actual Supabase project
    values (Project Settings → API → Project URL / anon public key). */
 const SUPABASE_URL = 'https://wstjabsjsxwbkbiouyug.supabase.co';
