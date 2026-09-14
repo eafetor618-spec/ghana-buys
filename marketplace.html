@@ -46,6 +46,9 @@
 
   <div class="marketplace-toolbar">
     <input type="text" class="search-input" id="searchInput" placeholder="Search listings…" aria-label="Search listings">
+    <select id="regionFilter" aria-label="Filter by region">
+      <option value="">All regions</option>
+    </select>
     <button type="button" class="btn-secondary" id="saveSearchBtn" style="white-space:nowrap;">🔔 Alert me</button>
   </div>
   <div class="form-status" id="saveSearchStatus" style="margin-bottom:10px;"></div>
@@ -86,6 +89,7 @@
   const PAGE_SIZE = 18;
   let currentOffset = 0;
   let currentCategory = new URLSearchParams(location.search).get('category') || '';
+  let currentRegion = new URLSearchParams(location.search).get('region') || '';
   let currentSearch = '';
   let searchDebounce;
 
@@ -94,6 +98,23 @@
   const loadMoreWrap = document.getElementById('loadMoreWrap');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const searchInput = document.getElementById('searchInput');
+  const regionFilter = document.getElementById('regionFilter');
+
+  GHANA_REGIONS.forEach(function (r) {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    regionFilter.appendChild(opt);
+  });
+  regionFilter.value = currentRegion;
+  regionFilter.addEventListener('change', function () {
+    currentRegion = regionFilter.value;
+    const url = new URL(location.href);
+    if (currentRegion) url.searchParams.set('region', currentRegion);
+    else url.searchParams.delete('region');
+    history.pushState({}, '', url);
+    resetAndLoad();
+  });
 
   function setActiveChip() {
     document.querySelectorAll('.cat-chip').forEach(function (chip) {
@@ -116,6 +137,7 @@
   async function fetchListings(offset, append) {
     let query = sb.from('listings').select('*').eq('status', 'active');
     if (currentCategory) query = query.eq('category', currentCategory);
+    if (currentRegion) query = query.eq('region', currentRegion);
     if (currentSearch) query = query.ilike('title', '%' + currentSearch + '%');
     query = query.order('featured', { ascending: false })
       .order('created_at', { ascending: false })
@@ -167,8 +189,8 @@
       window.location.href = '/account?next=' + encodeURIComponent(location.pathname + location.search);
       return;
     }
-    if (!currentCategory && !currentSearch) {
-      statusEl.textContent = 'Pick a category or type a search first.';
+    if (!currentCategory && !currentRegion && !currentSearch) {
+      statusEl.textContent = 'Pick a category, region, or type a search first.';
       statusEl.className = 'form-status error';
       return;
     }
@@ -178,6 +200,7 @@
     const { error } = await sb.from('saved_searches').insert({
       user_id: session.user.id,
       category: currentCategory || null,
+      region: currentRegion || null,
       keyword: currentSearch || null
     });
     btn.disabled = false;

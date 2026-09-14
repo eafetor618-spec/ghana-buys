@@ -73,9 +73,17 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <label for="location">Location</label>
-      <input type="text" id="location" maxlength="80" placeholder="e.g. East Legon, Accra">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="region">Region</label>
+        <select id="region" required>
+          <option value="">Select a region</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="location">Town / area</label>
+        <input type="text" id="location" maxlength="80" placeholder="e.g. East Legon">
+      </div>
     </div>
 
     <div class="form-row">
@@ -189,6 +197,14 @@
     categorySelect.appendChild(opt);
   });
 
+  const regionSelect = document.getElementById('region');
+  GHANA_REGIONS.forEach(function (r) {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    regionSelect.appendChild(opt);
+  });
+
   categorySelect.addEventListener('change', function () {
     const isOther = categorySelect.value === 'Other';
     customCategoryGroup.style.display = isOther ? '' : 'none';
@@ -293,6 +309,7 @@
         customCategoryInput.value = data.custom_category || '';
       }
       document.getElementById('location').value = data.location || '';
+      document.getElementById('region').value = data.region || '';
       document.getElementById('whatsapp').value = data.whatsapp || '';
       document.getElementById('description').value = data.description || '';
       if (data.momo_number || data.momo_name) {
@@ -322,6 +339,7 @@
     const category = document.getElementById('category').value;
     const customCategory = category === 'Other' ? customCategoryInput.value.trim() : null;
     const locationValue = document.getElementById('location').value.trim();
+    const region = document.getElementById('region').value;
     const whatsapp = document.getElementById('whatsapp').value.trim();
     const description = document.getElementById('description').value.trim();
     const acceptMomo = document.getElementById('acceptMomo').checked;
@@ -342,8 +360,8 @@
       return;
     }
 
-    if (!title || !category || !whatsapp) {
-      statusEl.textContent = 'Please fill in the title, category, and WhatsApp number.';
+    if (!title || !category || !whatsapp || !region) {
+      statusEl.textContent = 'Please fill in the title, category, region, and WhatsApp number.';
       statusEl.className = 'form-status error';
       return;
     }
@@ -385,6 +403,7 @@
         category: category,
         custom_category: customCategory,
         location: locationValue || null,
+        region: region,
         whatsapp: whatsapp,
         description: description || null,
         image_url: imageUrls[0] || null,
