@@ -1,8 +1,0 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "org.ghanabuys.twa",
-        "sha256_cert_fingerprints": ["01:49:96:98:CA:63:7B:AC:6E:6B:68:E3:5F:1F:C7:B7:E4:E9:05:50:00:CD:EB:3B:49:56:AC:D0:FC:6D:EE:C2"]
-      }
-    }]
