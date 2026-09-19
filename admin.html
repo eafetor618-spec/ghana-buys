@@ -39,6 +39,7 @@
       <button type="button" class="auth-tab" id="tabIdVerifications">ID verifications</button>
       <button type="button" class="auth-tab" id="tabFeatureRequests">Feature requests</button>
       <button type="button" class="auth-tab" id="tabStoreSubscriptions">Store subscriptions</button>
+      <button type="button" class="auth-tab" id="tabAiDescriptionRequests">AI descriptions</button>
     </div>
 
     <div id="overviewPanel"></div>
@@ -47,6 +48,7 @@
     <div id="idVerificationsPanel" style="display:none;"></div>
     <div id="featureRequestsPanel" style="display:none;"></div>
     <div id="storeSubscriptionsPanel" style="display:none;"></div>
+    <div id="aiDescriptionRequestsPanel" style="display:none;"></div>
   </div>
 </article>
 
@@ -83,6 +85,7 @@
     loadIdVerifications();
     loadFeatureRequests();
     loadStoreSubscriptions();
+    loadAiDescriptionRequests();
   }
 
   document.getElementById('tabOverview').addEventListener('click', function () {
@@ -103,8 +106,11 @@
   document.getElementById('tabStoreSubscriptions').addEventListener('click', function () {
     setTab('storeSubscriptions');
   });
+  document.getElementById('tabAiDescriptionRequests').addEventListener('click', function () {
+    setTab('aiDescriptionRequests');
+  });
   function setTab(which) {
-    ['Overview', 'UnderReview', 'AllReports', 'IdVerifications', 'FeatureRequests', 'StoreSubscriptions'].forEach(function (name) {
+    ['Overview', 'UnderReview', 'AllReports', 'IdVerifications', 'FeatureRequests', 'StoreSubscriptions', 'AiDescriptionRequests'].forEach(function (name) {
       const key = name.charAt(0).toLowerCase() + name.slice(1);
       document.getElementById('tab' + name).classList.toggle('active', key === which);
       document.getElementById(key + 'Panel').style.display = key === which ? '' : 'none';
@@ -478,6 +484,91 @@
     statusEl.textContent = 'Rejected.';
     statusEl.className = 'form-status success';
     setTimeout(function () { loadFeatureRequests(); loadOverview(); }, 700);
+  }
+
+  // AI description credits: same manual-MoMo-review pattern as feature
+  // requests above. Approving just marks the payment 'success' — the
+  // seller's next visit to the post form picks up the unused credit and
+  // lets them generate a description, no separate action needed here.
+  async function loadAiDescriptionRequests() {
+    const panel = document.getElementById('aiDescriptionRequestsPanel');
+    panel.innerHTML = '<p class="lead">Loading…</p>';
+
+    const { data: requests, error } = await sb
+      .from('ai_description_payments')
+      .select('*, profiles(id, email)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      panel.innerHTML = '<div class="callout">Couldn\'t load: ' + escapeHtml(error.message) + '</div>';
+      return;
+    }
+    if (!requests.length) {
+      panel.innerHTML = '<div class="callout">No pending AI description requests. 🎉</div>';
+      return;
+    }
+
+    panel.innerHTML = requests.map(function (r) {
+      const sellerName = r.profiles && r.profiles.email ? escapeHtml(r.profiles.email) : '(unknown seller)';
+      return (
+        '<div class="phone admin-mod-card">' +
+          '<div class="phone-head">' +
+            '<div class="card-title-group"><h2>' + sellerName + '</h2></div>' +
+            '<span class="price">₵' + (r.amount_pesewas / 100).toFixed(2) + '</span>' +
+          '</div>' +
+          '<p class="best-for">Requested ' + formatDate(r.created_at) + ' — confirm the Mobile Money payment landed before approving.</p>' +
+          '<div class="admin-mod-actions">' +
+            '<button type="button" class="btn-primary" data-action="approveAiDesc" data-id="' + r.id + '">Approve — grant 1 description credit</button>' +
+            '<button type="button" class="btn-secondary" data-action="rejectAiDesc" data-id="' + r.id + '">Reject</button>' +
+          '</div>' +
+          '<div class="form-status" id="aiDescReqStatus-' + r.id + '"></div>' +
+        '</div>'
+      );
+    }).join('');
+
+    document.querySelectorAll('[data-action="approveAiDesc"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { approveAiDescriptionRequest(this.dataset.id, this); });
+    });
+    document.querySelectorAll('[data-action="rejectAiDesc"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { rejectAiDescriptionRequest(this.dataset.id, this); });
+    });
+  }
+
+  async function approveAiDescriptionRequest(requestId, btn) {
+    const statusEl = document.getElementById('aiDescReqStatus-' + requestId);
+    btn.disabled = true;
+    const { error } = await sb
+      .from('ai_description_payments')
+      .update({ status: 'success', reviewed_at: new Date().toISOString() })
+      .eq('id', requestId);
+    if (error) {
+      statusEl.textContent = 'Failed: ' + error.message;
+      statusEl.className = 'form-status error';
+      btn.disabled = false;
+      return;
+    }
+    statusEl.textContent = 'Approved — seller can now generate a description.';
+    statusEl.className = 'form-status success';
+    setTimeout(function () { loadAiDescriptionRequests(); loadOverview(); }, 700);
+  }
+
+  async function rejectAiDescriptionRequest(requestId, btn) {
+    const statusEl = document.getElementById('aiDescReqStatus-' + requestId);
+    btn.disabled = true;
+    const { error } = await sb
+      .from('ai_description_payments')
+      .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
+      .eq('id', requestId);
+    if (error) {
+      statusEl.textContent = 'Failed: ' + error.message;
+      statusEl.className = 'form-status error';
+      btn.disabled = false;
+      return;
+    }
+    statusEl.textContent = 'Rejected.';
+    statusEl.className = 'form-status success';
+    setTimeout(function () { loadAiDescriptionRequests(); loadOverview(); }, 700);
   }
 
   async function loadStoreSubscriptions() {

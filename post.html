@@ -148,10 +148,8 @@
     </div>
 
     <div class="form-group">
-      <label for="description" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-        <span>Description</span>
-        <button type="button" id="aiDescribeBtn" style="font-size:0.78rem; font-weight:600; background:none; border:1.5px solid var(--ink); border-radius:20px; padding:4px 12px; cursor:pointer; color:var(--ink); white-space:nowrap;">✨ Help me write this — ₵60</button>
-      </label>
+      <label for="description">Description</label>
+      <div id="aiDescribeArea" style="margin-bottom:8px;"></div>
       <textarea id="description" maxlength="1500" placeholder="Condition, why you're selling, any details a buyer would want to know…"></textarea>
       <div id="aiDescribeStatus" style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;"></div>
     </div>
@@ -190,7 +188,6 @@
 </footer>
 
 <script src="/marketplace.js"></script>
-<script src="https://js.paystack.co/v1/inline.js"></script>
 <script>
 
   const editId = new URLSearchParams(location.search).get('id');
@@ -352,6 +349,7 @@
     currentUser = session.user;
     gate.style.display = 'none';
     form.style.display = 'block';
+    refreshAiDescribeArea();
 
     if (editId) {
       document.getElementById('pageHeading').textContent = 'Edit your listing';
@@ -463,33 +461,87 @@
     probe.src = tempUrl;
   });
 
-  // AI description helper: sends only the seller's own form fields to a
-  // Supabase edge function (which holds the API key server-side) and drops
-  // the result into the textarea for the seller to edit or discard.
-  const aiDescribeBtn = document.getElementById('aiDescribeBtn');
+  // AI description helper, manual Mobile Money flow (same pattern as the
+  // "feature this listing" MoMo box): seller sends ₵60 to the platform's
+  // MoMo number, submits a request, and an admin verifies it manually.
+  // Once approved, the credit sits on their account until they generate a
+  // description with it — no separate payment step needed at that point.
+  const aiDescribeArea = document.getElementById('aiDescribeArea');
   const aiDescribeStatus = document.getElementById('aiDescribeStatus');
   const descriptionEl = document.getElementById('description');
 
-  aiDescribeBtn.addEventListener('click', function () {
+  async function refreshAiDescribeArea() {
+    if (!currentUser) {
+      aiDescribeArea.innerHTML = '';
+      return;
+    }
+
+    const { data: rows } = await sb
+      .from('ai_description_payments')
+      .select('id, status, used_at, amount_pesewas')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const latest = rows && rows[0];
+
+    if (latest && latest.status === 'success' && !latest.used_at) {
+      aiDescribeArea.innerHTML =
+        '<button type="button" id="aiDescribeBtn" class="form-submit" style="background:var(--green,#00693E); margin-bottom:0;">✨ Generate my description</button>';
+      document.getElementById('aiDescribeBtn').addEventListener('click', runAiDescribeGeneration);
+      return;
+    }
+
+    if (latest && latest.status === 'pending') {
+      aiDescribeArea.innerHTML =
+        '<div class="callout" style="margin:0 0 10px;"><strong>AI description request submitted</strong>' +
+        '<p style="margin:6px 0 0;">We\'re checking your Mobile Money payment. Once approved, come back here to generate your description \u2014 usually within a few hours.</p></div>';
+      return;
+    }
+
+    const { data: settingsRows } = await sb
+      .from('site_settings')
+      .select('key, value')
+      .in('key', ['feature_momo_number', 'feature_momo_name', 'feature_momo_network']);
+    const settings = {};
+    (settingsRows || []).forEach(function (row) { settings[row.key] = row.value; });
+
+    aiDescribeArea.innerHTML =
+      '<div class="callout" style="margin:0 0 10px;">' +
+        '<strong>✨ Get an AI-written description \u2014 ₵60</strong>' +
+        '<p style="margin:6px 0 12px;">Send ₵60 via Mobile Money and we\'ll write a short, honest description from your item\u2019s details.</p>' +
+        '<div style="background:#fff; border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; font-size:0.95rem;">' +
+          '<div>Send <strong>\u20b560</strong> to:</div>' +
+          '<div style="font-family:\'IBM Plex Mono\',monospace; font-size:1.1rem; margin:4px 0;">' + escapeHtml(settings.feature_momo_number || '') + '</div>' +
+          '<div>' + escapeHtml(settings.feature_momo_name || '') + ' \u2014 ' + escapeHtml(settings.feature_momo_network || '') + '</div>' +
+        '</div>' +
+        '<p style="margin:0 0 12px; font-size:0.9rem; color:var(--ink-soft,#555);">After sending, tap the button below. We\'ll verify manually, usually within a few hours.</p>' +
+        '<button type="button" class="btn-primary" id="aiDescribeRequestBtn">I\u2019ve sent the ₵60 \u2014 request my description</button>' +
+      '</div>';
+
+    document.getElementById('aiDescribeRequestBtn').addEventListener('click', async function () {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = 'Submitting\u2026';
+      const { error } = await sb.from('ai_description_payments').insert({ user_id: currentUser.id });
+      if (error) {
+        aiDescribeStatus.textContent = 'Something went wrong: ' + error.message;
+        btn.disabled = false;
+        btn.textContent = 'I\u2019ve sent the ₵60 \u2014 request my description';
+        return;
+      }
+      refreshAiDescribeArea();
+    });
+  }
+
+  async function runAiDescribeGeneration() {
     const title = document.getElementById('title').value.trim();
     if (!title) {
       aiDescribeStatus.textContent = 'Add a title first so there\u2019s something to describe.';
       return;
     }
-
-    aiDescribeBtn.disabled = true;
-    aiDescribeStatus.textContent = 'Opening payment\u2026';
-
-    startAiDescriptionCheckout(
-      function () { runAiDescribeGeneration(); },
-      function (err) {
-        aiDescribeBtn.disabled = false;
-        aiDescribeStatus.textContent = err.message || 'Payment was not completed.';
-      }
-    );
-  });
-
-  async function runAiDescribeGeneration() {
+    const btn = document.getElementById('aiDescribeBtn');
+    if (btn) btn.disabled = true;
     aiDescribeStatus.textContent = 'Writing a draft\u2026';
     try {
       const { data: sessionData } = await sb.auth.getSession();
@@ -503,7 +555,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify({
-          title: document.getElementById('title').value.trim(),
+          title: title,
           category: document.getElementById('category').value,
           condition: document.getElementById('condition').value,
           brand: document.getElementById('brand').value.trim(),
@@ -516,10 +568,10 @@
 
       descriptionEl.value = result.description;
       aiDescribeStatus.textContent = 'Draft added \u2014 feel free to edit it before posting.';
+      refreshAiDescribeArea();
     } catch (err) {
       aiDescribeStatus.textContent = err.message || 'Something went wrong \u2014 please try again.';
-    } finally {
-      aiDescribeBtn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
