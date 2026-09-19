@@ -6,18 +6,18 @@ GitHub's mobile "Add file" button (or any drag-and-drop uploader) works
 in one pass with nothing getting lost.
 
 Pages:
-  index.html           -> https://ghanabuys.com/            (marketplace home)
-  marketplace.html      -> https://ghanabuys.com/marketplace  (browse/search listings)
-  listing.html          -> https://ghanabuys.com/listing      (single listing, ?id=...)
-  post.html             -> https://ghanabuys.com/post         (post/edit a listing, login required)
-  account.html          -> https://ghanabuys.com/account      (log in / sign up / my listings)
-  phones.html           -> https://ghanabuys.com/phones
-  stores.html           -> https://ghanabuys.com/stores
-  powerbanks.html       -> https://ghanabuys.com/powerbanks
-  clothes.html          -> https://ghanabuys.com/clothes
-  databundles.html      -> https://ghanabuys.com/databundles
-  privacy.html          -> https://ghanabuys.com/privacy
-  methodology.html      -> https://ghanabuys.com/methodology
+  index.html           -> https://ghanabuys.org/            (marketplace home)
+  marketplace.html      -> https://ghanabuys.org/marketplace  (browse/search listings)
+  listing.html          -> https://ghanabuys.org/listing      (single listing, ?id=...)
+  post.html             -> https://ghanabuys.org/post         (post/edit a listing, login required)
+  account.html          -> https://ghanabuys.org/account      (log in / sign up / my listings)
+  phones.html           -> https://ghanabuys.org/phones
+  stores.html           -> https://ghanabuys.org/stores
+  powerbanks.html       -> https://ghanabuys.org/powerbanks
+  clothes.html          -> https://ghanabuys.org/clothes
+  databundles.html      -> https://ghanabuys.org/databundles
+  privacy.html          -> https://ghanabuys.org/privacy
+  methodology.html      -> https://ghanabuys.org/methodology
 
 Shared files:
   style.css             (all styling, linked as /style.css)
@@ -61,7 +61,7 @@ Deploying:
      needed on the live site, but are harmless to include) and upload
      them to your GitHub repo root, or drag them into Netlify/Vercel's
      deploy UI. No folders to create.
-  2. If ghanabuys.com isn't your real domain, find/replace it in:
+  2. If ghanabuys.org isn't your real domain, find/replace it in:
      canonical tags, og:url tags, the JSON-LD "item" URLs in each
      guide page, and sitemap.xml.
   3. Run the Supabase setup above.
