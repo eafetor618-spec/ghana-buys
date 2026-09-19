@@ -219,12 +219,13 @@ function listingCardHTML(l) {
   const soldBadge = l.status === 'sold' ? '<span class="listing-sold-badge">Sold</span>' : '';
   const isFeatured = l.featured && l.featured_until && new Date(l.featured_until) > new Date();
   const featuredBadge = isFeatured ? '<span class="listing-featured-badge">★ Featured</span>' : '';
+  const videoBadge = l.video_url ? '<span class="listing-video-badge">▶ Video</span>' : '';
 
   return (
     '<a class="listing-card" href="/listing?id=' + l.id + '">' +
       '<div class="listing-thumb-wrap">' +
         '<div class="listing-thumb">' + img + '</div>' +
-        soldBadge + featuredBadge +
+        soldBadge + featuredBadge + videoBadge +
         '<button type="button" class="save-btn" data-id="' + l.id + '" aria-label="Add to cart">' +
           '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.4l1.1 3M5.9 6l1.9 8.6a1.6 1.6 0 0 0 1.6 1.3h7.6a1.6 1.6 0 0 0 1.6-1.3L20.5 6H5.9z"/></svg>' +
         '</button>' +
