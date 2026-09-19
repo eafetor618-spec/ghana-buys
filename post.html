@@ -159,6 +159,17 @@
       <div class="file-preview-grid" id="filePreviewGrid" style="display:none; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:8px; margin-top:10px;"></div>
     </div>
 
+    <div class="form-group">
+      <label for="video">Video <span style="font-weight:400; color:var(--ink-soft);">(optional)</span></label>
+      <div class="file-drop" id="videoDrop">Tap to add a short video of the item — up to 60 seconds, 25MB max. Listings with video build more trust with buyers.</div>
+      <input type="file" id="video" accept="video/mp4,video/webm,video/quicktime" style="display:none;">
+      <div id="videoPreviewWrap" style="display:none; margin-top:10px; position:relative; max-width:280px;">
+        <video id="videoPreview" controls style="width:100%; border-radius:10px; display:block;"></video>
+        <button type="button" id="videoRemoveBtn" aria-label="Remove video"
+          style="position:absolute; top:6px; right:6px; width:28px; height:28px; border-radius:50%; border:none; background:rgba(0,0,0,0.65); color:#fff; font-size:16px; line-height:1; cursor:pointer;">&times;</button>
+      </div>
+    </div>
+
     <button type="submit" class="form-submit" id="submitBtn">Post listing</button>
     <div class="form-status" id="formStatus"></div>
   </form>
@@ -377,8 +388,75 @@
       const existingUrls = (data.image_urls && data.image_urls.length) ? data.image_urls : (data.image_url ? [data.image_url] : []);
       photos = existingUrls.map(function (url) { return { type: 'existing', url: url }; });
       renderPreviewGrid();
+      if (data.video_url) {
+        video = { type: 'existing', url: data.video_url };
+        showVideoPreview(data.video_url);
+      }
     }
   }
+
+  // Video: single file, no client-side compression (too heavy for a phone
+  // browser to transcode) — instead we just enforce sane size/duration
+  // limits up front so nobody accidentally uploads a multi-minute 4K clip.
+  const MAX_VIDEO_BYTES = 25 * 1024 * 1024; // 25MB, matches the storage bucket limit
+  const MAX_VIDEO_SECONDS = 60;
+  const videoInput = document.getElementById('video');
+  const videoDrop = document.getElementById('videoDrop');
+  const videoPreviewWrap = document.getElementById('videoPreviewWrap');
+  const videoPreview = document.getElementById('videoPreview');
+  const videoRemoveBtn = document.getElementById('videoRemoveBtn');
+  let video = null; // { type: 'existing', url } or { type: 'new', file, previewUrl }
+
+  function showVideoPreview(src) {
+    videoPreview.src = src;
+    videoPreviewWrap.style.display = 'block';
+    videoDrop.style.display = 'none';
+  }
+
+  function clearVideo() {
+    video = null;
+    videoInput.value = '';
+    videoPreview.removeAttribute('src');
+    videoPreviewWrap.style.display = 'none';
+    videoDrop.style.display = 'block';
+  }
+
+  videoDrop.addEventListener('click', function () { videoInput.click(); });
+
+  videoRemoveBtn.addEventListener('click', function () { clearVideo(); });
+
+  videoInput.addEventListener('change', function () {
+    const file = videoInput.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_VIDEO_BYTES) {
+      statusEl.textContent = 'That video is too large — please keep it under 25MB.';
+      statusEl.className = 'form-status form-status-error';
+      videoInput.value = '';
+      return;
+    }
+
+    // Check duration by loading it into a throwaway <video> element before
+    // accepting it — rejects clips over the limit without ever uploading them.
+    const tempUrl = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = function () {
+      URL.revokeObjectURL(tempUrl);
+      if (probe.duration > MAX_VIDEO_SECONDS) {
+        statusEl.textContent = 'Please keep videos under ' + MAX_VIDEO_SECONDS + ' seconds.';
+        statusEl.className = 'form-status form-status-error';
+        videoInput.value = '';
+        return;
+      }
+      statusEl.textContent = '';
+      statusEl.className = 'form-status';
+      const previewUrl = URL.createObjectURL(file);
+      video = { type: 'new', file: file, previewUrl: previewUrl };
+      showVideoPreview(previewUrl);
+    };
+    probe.src = tempUrl;
+  });
 
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -445,6 +523,18 @@
         }
       }
 
+      let videoUrl = null;
+      if (video && video.type === 'existing') {
+        videoUrl = video.url;
+      } else if (video && video.type === 'new') {
+        const ext = video.file.name.split('.').pop();
+        const path = currentUser.id + '/' + Date.now() + '-video.' + ext;
+        const { error: videoUploadError } = await sb.storage.from('listing-videos').upload(path, video.file);
+        if (videoUploadError) throw videoUploadError;
+        const { data: videoUrlData } = sb.storage.from('listing-videos').getPublicUrl(path);
+        videoUrl = videoUrlData.publicUrl;
+      }
+
       const payload = {
         title: title,
         price: priceRaw === '' ? null : Number(priceRaw),
@@ -460,6 +550,7 @@
         description: description || null,
         image_url: imageUrls[0] || null,
         image_urls: imageUrls,
+        video_url: videoUrl,
         momo_number: momoNumber,
         momo_name: momoName,
         momo_networks: momoNetworks

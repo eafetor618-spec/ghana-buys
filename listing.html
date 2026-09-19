@@ -99,6 +99,12 @@
             : '')
         : placeholderIconSVG();
 
+      const videoBlock = data.video_url
+        ? '<div class="listing-detail-video" style="margin-top:12px;">' +
+            '<video controls playsinline preload="metadata" style="width:100%; border-radius:12px; display:block;" src="' + escapeHtml(data.video_url) + '"></video>' +
+          '</div>'
+        : '';
+
       const soldNote = data.status === 'sold'
         ? '<div class="callout" style="margin-bottom:20px;"><strong>This item has been marked sold.</strong> The seller may still respond, but it may no longer be available.</div>'
         : '';
@@ -167,10 +173,13 @@
       content.innerHTML =
         soldNote +
         '<div class="listing-detail">' +
-          '<div class="listing-detail-img">' + img +
-            '<button type="button" class="save-btn" data-id="' + data.id + '" aria-label="Add to cart">' +
-              '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.4l1.1 3M5.9 6l1.9 8.6a1.6 1.6 0 0 0 1.6 1.3h7.6a1.6 1.6 0 0 0 1.6-1.3L20.5 6H5.9z"/></svg>' +
-            '</button>' +
+          '<div>' +
+            '<div class="listing-detail-img">' + img +
+              '<button type="button" class="save-btn" data-id="' + data.id + '" aria-label="Add to cart">' +
+                '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.4l1.1 3M5.9 6l1.9 8.6a1.6 1.6 0 0 0 1.6 1.3h7.6a1.6 1.6 0 0 0 1.6-1.3L20.5 6H5.9z"/></svg>' +
+              '</button>' +
+            '</div>' +
+            videoBlock +
           '</div>' +
           '<div>' +
             featuredNote +
