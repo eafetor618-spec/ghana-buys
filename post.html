@@ -150,7 +150,7 @@
     <div class="form-group">
       <label for="description" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
         <span>Description</span>
-        <button type="button" id="aiDescribeBtn" style="font-size:0.78rem; font-weight:600; background:none; border:1.5px solid var(--ink); border-radius:20px; padding:4px 12px; cursor:pointer; color:var(--ink); white-space:nowrap;">✨ Help me write this</button>
+        <button type="button" id="aiDescribeBtn" style="font-size:0.78rem; font-weight:600; background:none; border:1.5px solid var(--ink); border-radius:20px; padding:4px 12px; cursor:pointer; color:var(--ink); white-space:nowrap;">✨ Help me write this — ₵60</button>
       </label>
       <textarea id="description" maxlength="1500" placeholder="Condition, why you're selling, any details a buyer would want to know…"></textarea>
       <div id="aiDescribeStatus" style="font-size:0.78rem; color:var(--ink-soft); margin-top:4px;"></div>
@@ -190,6 +190,7 @@
 </footer>
 
 <script src="/marketplace.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
 <script>
 
   const editId = new URLSearchParams(location.search).get('id');
@@ -469,7 +470,7 @@
   const aiDescribeStatus = document.getElementById('aiDescribeStatus');
   const descriptionEl = document.getElementById('description');
 
-  aiDescribeBtn.addEventListener('click', async function () {
+  aiDescribeBtn.addEventListener('click', function () {
     const title = document.getElementById('title').value.trim();
     if (!title) {
       aiDescribeStatus.textContent = 'Add a title first so there\u2019s something to describe.';
@@ -477,8 +478,19 @@
     }
 
     aiDescribeBtn.disabled = true;
-    aiDescribeStatus.textContent = 'Writing a draft\u2026';
+    aiDescribeStatus.textContent = 'Opening payment\u2026';
 
+    startAiDescriptionCheckout(
+      function () { runAiDescribeGeneration(); },
+      function (err) {
+        aiDescribeBtn.disabled = false;
+        aiDescribeStatus.textContent = err.message || 'Payment was not completed.';
+      }
+    );
+  });
+
+  async function runAiDescribeGeneration() {
+    aiDescribeStatus.textContent = 'Writing a draft\u2026';
     try {
       const { data: sessionData } = await sb.auth.getSession();
       const token = sessionData.session ? sessionData.session.access_token : null;
@@ -491,7 +503,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify({
-          title: title,
+          title: document.getElementById('title').value.trim(),
           category: document.getElementById('category').value,
           condition: document.getElementById('condition').value,
           brand: document.getElementById('brand').value.trim(),
@@ -509,7 +521,7 @@
     } finally {
       aiDescribeBtn.disabled = false;
     }
-  });
+  }
 
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
