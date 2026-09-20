@@ -4,7 +4,7 @@
 // this is a live marketplace, so cached listings would quickly go stale.
 // Bump CACHE_NAME whenever a static asset below changes, so old cached
 // copies get replaced instead of served stale.
-const CACHE_NAME = 'ghanabuys-static-v1';
+const CACHE_NAME = 'ghanabuys-static-v2';
 
 const STATIC_ASSETS = [
   '/style.css',
@@ -72,4 +72,42 @@ self.addEventListener('fetch', function (event) {
       })
     );
   }
+});
+
+// Push notifications: shows a native notification when the send-push edge
+// function delivers one (new message, or a saved search match). Payload is
+// a small JSON object: { title, body, url }.
+self.addEventListener('push', function (event) {
+  let data = { title: 'Ghana Buys', body: 'You have a new notification.', url: '/' };
+  try {
+    if (event.data) data = Object.assign(data, event.data.json());
+  } catch (e) { /* ignore malformed payloads */ }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: data.url }
+    })
+  );
+});
+
+// Tapping a notification focuses an already-open GhanaBuys tab if one
+// exists (navigating it to the right page), otherwise opens a new one.
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
 });

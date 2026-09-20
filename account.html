@@ -117,6 +117,7 @@
       <div class="empty-state"><h3>Loading your listings…</h3></div>
     </div>
     <div id="savedListings" style="margin-top:20px; display:none;"></div>
+    <div id="pushToggleBox" style="display:none; margin-top:20px;"></div>
     <div id="savedSearches" style="margin-top:20px; display:none;"></div>
     <div id="myMessages" style="margin-top:20px; display:none;"></div>
     <div id="myStore" style="margin-top:20px; display:none;"></div>
@@ -489,6 +490,8 @@
     document.getElementById('myListings').style.display = which === 'mine' ? '' : 'none';
     document.getElementById('savedListings').style.display = which === 'saved' ? '' : 'none';
     document.getElementById('savedSearches').style.display = which === 'alerts' ? '' : 'none';
+    document.getElementById('pushToggleBox').style.display = which === 'alerts' ? '' : 'none';
+    if (which === 'alerts') renderPushToggleBox();
     document.getElementById('myMessages').style.display = which === 'messages' ? '' : 'none';
     document.getElementById('myStore').style.display = which === 'store' ? '' : 'none';
     document.getElementById('myVerification').style.display = which === 'verification' ? '' : 'none';
@@ -525,6 +528,59 @@
 
     wrap.innerHTML = '<div class="listing-grid">' + listings.map(listingCardHTML).join('') + '</div>';
     refreshSavedButtons();
+  }
+
+  async function renderPushToggleBox() {
+    const box = document.getElementById('pushToggleBox');
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { box.innerHTML = ''; return; }
+
+    if (!pushNotificationsSupported()) {
+      box.innerHTML = '<div class="callout">Push notifications aren\u2019t supported on this browser.</div>';
+      return;
+    }
+
+    const permission = pushNotificationPermissionState();
+
+    if (permission === 'denied') {
+      box.innerHTML =
+        '<div class="callout"><strong>Notifications are blocked</strong>' +
+        '<p style="margin:6px 0 0;">You\u2019ve blocked notifications for this site in your browser settings. Enable them there to get alerted about new messages and matches.</p></div>';
+      return;
+    }
+
+    if (permission === 'granted') {
+      box.innerHTML =
+        '<div class="callout"><strong>\ud83d\udd14 Notifications are on</strong>' +
+        '<p style="margin:6px 0 12px;">You\u2019ll be notified about new messages and matches for your saved alerts.</p>' +
+        '<button type="button" class="btn-secondary" id="disablePushBtn">Turn off notifications</button>' +
+        '<div class="form-status" id="pushToggleStatus"></div></div>';
+      document.getElementById('disablePushBtn').addEventListener('click', async function () {
+        this.disabled = true;
+        await disablePushNotifications();
+        renderPushToggleBox();
+      });
+      return;
+    }
+
+    box.innerHTML =
+      '<div class="callout"><strong>\ud83d\udd14 Get notified</strong>' +
+      '<p style="margin:6px 0 12px;">Turn on notifications to hear the moment a buyer messages you, or when a new listing matches one of your alerts below.</p>' +
+      '<button type="button" class="btn-primary" id="enablePushBtn">Enable notifications</button>' +
+      '<div class="form-status" id="pushToggleStatus"></div></div>';
+    document.getElementById('enablePushBtn').addEventListener('click', async function () {
+      const btn = this;
+      const statusEl = document.getElementById('pushToggleStatus');
+      btn.disabled = true;
+      try {
+        await enablePushNotifications(session.user.id);
+        renderPushToggleBox();
+      } catch (err) {
+        statusEl.textContent = err.message || 'Something went wrong.';
+        statusEl.className = 'form-status error';
+        btn.disabled = false;
+      }
+    });
   }
 
   async function loadSavedSearches() {
