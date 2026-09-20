@@ -126,18 +126,20 @@
     monthStart.setHours(0, 0, 0, 0);
 
     const [
-      featurePaymentsAll, storePaymentsAll,
+      featurePaymentsAll, storePaymentsAll, aiDescPaymentsAll,
       activeListingsCount, usersCount,
-      reportsCount, pendingIdCount, pendingFeatureCount, pendingStoreSubCount
+      reportsCount, pendingIdCount, pendingFeatureCount, pendingStoreSubCount, pendingAiDescCount
     ] = await Promise.all([
       sb.from('feature_payments').select('amount_pesewas, created_at').eq('status', 'success'),
       sb.from('store_payments').select('amount_pesewas, created_at').eq('status', 'success'),
+      sb.from('ai_description_payments').select('amount_pesewas, created_at').eq('status', 'success'),
       sb.from('listings').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       sb.from('profiles').select('id', { count: 'exact', head: true }),
       sb.from('listing_reports').select('id', { count: 'exact', head: true }),
       sb.from('id_verifications').select('user_id', { count: 'exact', head: true }).eq('status', 'pending'),
       sb.from('feature_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      sb.from('store_subscription_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+      sb.from('store_subscription_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      sb.from('ai_description_payments').select('id', { count: 'exact', head: true }).eq('status', 'pending')
     ]);
 
     function sumSince(rows, since) {
@@ -151,13 +153,16 @@
 
     const featureRows = featurePaymentsAll.data || [];
     const storeRows = storePaymentsAll.data || [];
+    const aiDescRows = aiDescPaymentsAll.data || [];
 
-    const monthPesewas = sumSince(featureRows, monthStart) + sumSince(storeRows, monthStart);
-    const allTimePesewas = sumSince(featureRows, null) + sumSince(storeRows, null);
+    const monthPesewas = sumSince(featureRows, monthStart) + sumSince(storeRows, monthStart) + sumSince(aiDescRows, monthStart);
+    const allTimePesewas = sumSince(featureRows, null) + sumSince(storeRows, null) + sumSince(aiDescRows, null);
     const monthFeatureCount = countSince(featureRows, monthStart);
     const monthStoreCount = countSince(storeRows, monthStart);
+    const monthAiDescCount = countSince(aiDescRows, monthStart);
     const allFeatureCount = featureRows.length;
     const allStoreCount = storeRows.length;
+    const allAiDescCount = aiDescRows.length;
 
     function statCard(label, value, sub) {
       return (
@@ -171,8 +176,8 @@
 
     panel.innerHTML =
       '<div class="admin-stat-grid">' +
-        statCard('Revenue this month', formatPrice(monthPesewas / 100), monthFeatureCount + ' feature(s) + ' + monthStoreCount + ' store sub(s)') +
-        statCard('Revenue all-time', formatPrice(allTimePesewas / 100), allFeatureCount + ' feature(s) + ' + allStoreCount + ' store sub(s)') +
+        statCard('Revenue this month', formatPrice(monthPesewas / 100), monthFeatureCount + ' feature(s) + ' + monthStoreCount + ' store sub(s) + ' + monthAiDescCount + ' AI desc(s)') +
+        statCard('Revenue all-time', formatPrice(allTimePesewas / 100), allFeatureCount + ' feature(s) + ' + allStoreCount + ' store sub(s) + ' + allAiDescCount + ' AI desc(s)') +
         statCard('Active listings', activeListingsCount.count || 0) +
         statCard('Registered users', usersCount.count || 0) +
       '</div>' +
@@ -182,6 +187,7 @@
         statCard('ID verifications', pendingIdCount.count || 0) +
         statCard('Feature requests', pendingFeatureCount.count || 0) +
         statCard('Store subscriptions', pendingStoreSubCount.count || 0) +
+        statCard('AI descriptions', pendingAiDescCount.count || 0) +
       '</div>';
   }
 
