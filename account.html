@@ -629,6 +629,52 @@
     loadSavedSearches();
   });
 
+  // Resizes to at most maxDimension on the longer side and re-encodes as
+  // JPEG, so a multi-MB phone photo doesn't get uploaded as-is. Same helper
+  // used for listing photos in post.html. Falls back to the original file
+  // untouched if it's already small or if compressing wouldn't help.
+  function compressImage(file, maxDimension, quality) {
+    return new Promise(function (resolve) {
+      if (!file.type.startsWith('image/') || file.size < 300 * 1024) {
+        resolve(file);
+        return;
+      }
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(objectUrl);
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round(height * (maxDimension / width));
+            width = maxDimension;
+          } else {
+            width = Math.round(width * (maxDimension / height));
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(function (blob) {
+          if (!blob || blob.size >= file.size) {
+            resolve(file);
+            return;
+          }
+          const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+          resolve(new File([blob], newName, { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+      img.src = objectUrl;
+    });
+  }
+
   async function loadMyStore() {
     const wrap = document.getElementById('myStore');
     wrap.innerHTML = '<div class="empty-state"><h3>Loading…</h3></div>';
@@ -689,6 +735,14 @@
 
     wrap.innerHTML =
       '<form id="storeForm">' +
+        '<div class="form-group"><label>Store logo <span style="font-weight:400; color:var(--ink-soft);">(optional)</span></label>' +
+          '<div id="storeLogoPreviewWrap" style="display:' + (store && store.logo_url ? 'block' : 'none') + '; margin-bottom:8px; position:relative; width:96px;">' +
+            '<img id="storeLogoPreview" src="' + (store && store.logo_url ? escapeHtml(store.logo_url) : '') + '" style="width:96px; height:96px; object-fit:cover; border-radius:12px; display:block;">' +
+            '<button type="button" id="storeLogoRemoveBtn" aria-label="Remove logo" style="position:absolute; top:-8px; right:-8px; width:24px; height:24px; border-radius:50%; border:none; background:rgba(0,0,0,0.65); color:#fff; font-size:14px; line-height:1; cursor:pointer;">&times;</button>' +
+          '</div>' +
+          '<div class="file-drop" id="storeLogoDrop" style="display:' + (store && store.logo_url ? 'none' : 'block') + ';">Tap to add a logo or cover photo for your store</div>' +
+          '<input type="file" id="storeLogoInput" accept="image/*" style="display:none;">' +
+        '</div>' +
         '<div class="form-group"><label>Store name</label>' +
         '<input type="text" id="storeName" required placeholder="e.g. Kofi\'s Electronics" value="' + (store ? escapeHtml(store.name) : '') + '"></div>' +
         '<div class="form-group"><label>Description</label>' +
@@ -700,17 +754,63 @@
       '</form>' +
       '<div style="margin-top:20px;">' + subscribeSection + '</div>';
 
+    // Logo upload: single image, resized/compressed the same way listing
+    // photos are, with a live preview and remove button. The actual upload
+    // to storage happens on form submit, matching how the rest of this form
+    // only writes once the seller confirms.
+    let pendingLogo = store && store.logo_url ? { type: 'existing', url: store.logo_url } : null;
+    const logoDrop = document.getElementById('storeLogoDrop');
+    const logoInput = document.getElementById('storeLogoInput');
+    const logoPreviewWrap = document.getElementById('storeLogoPreviewWrap');
+    const logoPreview = document.getElementById('storeLogoPreview');
+
+    logoDrop.addEventListener('click', function () { logoInput.click(); });
+    document.getElementById('storeLogoRemoveBtn').addEventListener('click', function () {
+      pendingLogo = null;
+      logoInput.value = '';
+      logoPreview.removeAttribute('src');
+      logoPreviewWrap.style.display = 'none';
+      logoDrop.style.display = 'block';
+    });
+    logoInput.addEventListener('change', async function () {
+      const file = logoInput.files[0];
+      if (!file) return;
+      const compressed = await compressImage(file, 800, 0.85);
+      const previewUrl = URL.createObjectURL(compressed);
+      pendingLogo = { type: 'new', file: compressed, previewUrl: previewUrl };
+      logoPreview.src = previewUrl;
+      logoPreviewWrap.style.display = 'block';
+      logoDrop.style.display = 'none';
+    });
+
     document.getElementById('storeForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       const statusEl = document.getElementById('storeFormStatus');
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+
+      let logoUrl = pendingLogo && pendingLogo.type === 'existing' ? pendingLogo.url : null;
+      if (pendingLogo && pendingLogo.type === 'new') {
+        const ext = pendingLogo.file.name.split('.').pop();
+        const path = userId + '/' + Date.now() + '-logo.' + ext;
+        const { error: uploadError } = await sb.storage.from('store-images').upload(path, pendingLogo.file);
+        if (uploadError) {
+          statusEl.textContent = uploadError.message;
+          statusEl.className = 'form-status error';
+          btn.disabled = false;
+          return;
+        }
+        const { data: urlData } = sb.storage.from('store-images').getPublicUrl(path);
+        logoUrl = urlData.publicUrl;
+      }
+
       const payload = {
         user_id: userId,
         name: document.getElementById('storeName').value.trim(),
         description: document.getElementById('storeDesc').value.trim() || null,
-        whatsapp: document.getElementById('storeWhatsapp').value.trim() || null
+        whatsapp: document.getElementById('storeWhatsapp').value.trim() || null,
+        logo_url: logoUrl
       };
-      const btn = e.target.querySelector('button[type="submit"]');
-      btn.disabled = true;
 
       const { error } = store
         ? await sb.from('stores').update(payload).eq('id', store.id)

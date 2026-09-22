@@ -62,9 +62,13 @@
 
     const isActive = store.active && store.expires_at && new Date(store.expires_at) > new Date();
     const badge = isActive ? '<span class="listing-featured-badge" style="position:static;display:inline-block;margin-bottom:10px;">✓ Verified Store</span>' : '';
+    const logoHtml = store.logo_url
+      ? '<img src="' + escapeHtml(store.logo_url) + '" alt="' + escapeHtml(store.name) + ' logo" style="width:96px; height:96px; object-fit:cover; border-radius:16px; margin-bottom:14px; display:block;">'
+      : '';
 
     article.innerHTML =
       '<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span class="crumb-sep">/</span><a href="/marketplace">Marketplace</a><span class="crumb-sep">/</span><span aria-current="page">' + escapeHtml(store.name) + '</span></nav>' +
+      logoHtml +
       badge +
       '<h1 class="title">' + escapeHtml(store.name) + '</h1>' +
       '<div id="storeRatingSummary" style="margin:4px 0 12px; font-size:0.9rem; color:var(--ink-soft);"></div>' +
