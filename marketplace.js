@@ -60,10 +60,6 @@ function startStoreSubscriptionCheckout(onSuccess, onError) {
   startPaidFeatureCheckout('store-subscription', {}, onSuccess, onError);
 }
 
-function startAiDescriptionCheckout(onSuccess, onError) {
-  startPaidFeatureCheckout('pay-ai-description', {}, onSuccess, onError);
-}
-
 // Buyer-pays-seller checkout, routed via Paystack subaccount split so the
 // money settles directly with the seller — Ghana Buys never holds it.
 async function callPayListingFn(action, payload) {
