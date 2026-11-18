@@ -14,7 +14,6 @@
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://js.paystack.co/v1/inline.js"></script>
 </head>
 <body class="page-account">
 
@@ -695,17 +694,10 @@
       pendingRequest = reqData;
     }
 
-    const { data: settingsRows } = await sb
-      .from('site_settings')
-      .select('key, value')
-      .in('key', ['feature_momo_number', 'feature_momo_name', 'feature_momo_network']);
-    const settings = {};
-    (settingsRows || []).forEach(function (row) { settings[row.key] = row.value; });
-
-    renderStoreTab(store, session.user.id, pendingRequest, settings);
+    renderStoreTab(store, session.user.id, pendingRequest);
   }
 
-  function renderStoreTab(store, userId, pendingRequest, momoSettings) {
+  function renderStoreTab(store, userId, pendingRequest) {
     const wrap = document.getElementById('myStore');
     const isActive = store && store.active && store.expires_at && new Date(store.expires_at) > new Date();
 
@@ -715,21 +707,16 @@
         '<div class="callout"><strong>Subscription request submitted</strong>' +
           '<p style="margin-top:4px;">We\'re checking your Mobile Money payment and will activate your store shortly. This usually takes a few hours.</p></div>';
     } else if (store) {
-      const momoBlock =
-        '<div style="background:#fff; border:1px solid #ddd; border-radius:8px; padding:12px; margin:12px 0; font-size:0.95rem;">' +
-          '<div>Send <strong>₵30</strong> to:</div>' +
-          '<div style="font-family:\'IBM Plex Mono\',monospace; font-size:1.1rem; margin:4px 0;">' + escapeHtml(momoSettings.feature_momo_number || '') + '</div>' +
-          '<div>' + escapeHtml(momoSettings.feature_momo_name || '') + ' — ' + escapeHtml(momoSettings.feature_momo_network || '') + '</div>' +
-        '</div>';
+      const payNote = '<p style="margin:8px 0 12px; font-size:0.9rem; color:var(--ink-soft,#555);">Pay ₵30 with Mobile Money (MTN, Telecel, AirtelTigo) or card — your store updates straight away.</p>';
 
       subscribeSection = isActive
         ? '<div class="callout"><strong>✓ Store subscription active</strong><p style="margin-top:4px;">Expires ' + formatDate(store.expires_at) + '. <a href="/store?id=' + store.id + '" target="_blank">View your public store page →</a></p>' +
-            momoBlock +
-            '<button type="button" class="btn-secondary" id="subscribeStoreBtn" style="margin-top:4px;">I\'ve sent ₵30 — renew (+30 days)</button>' +
+            payNote +
+            '<button type="button" class="btn-secondary" id="subscribeStoreBtn" style="margin-top:4px;">Pay ₵30 — renew (+30 days)</button>' +
             '<div class="form-status" id="storeSubStatus"></div></div>'
         : '<div class="callout"><strong>Subscription ' + (store.expires_at ? 'expired' : 'not started') + '</strong><p style="margin-top:4px;">Subscribe to get a public store page listing all your items, with a verified badge on your listings — ₵30/month.</p>' +
-            momoBlock +
-            '<button type="button" class="btn-primary" id="subscribeStoreBtn" style="margin-top:4px;">I\'ve sent ₵30 — activate my store</button>' +
+            payNote +
+            '<button type="button" class="btn-primary" id="subscribeStoreBtn" style="margin-top:4px;">Pay ₵30 — activate my store</button>' +
             '<div class="form-status" id="storeSubStatus"></div></div>';
     }
 
@@ -829,26 +816,49 @@
 
     const subBtn = document.getElementById('subscribeStoreBtn');
     if (subBtn) {
-      subBtn.addEventListener('click', async function () {
-        subBtn.disabled = true;
+      subBtn.addEventListener('click', function () {
+        const statusEl = document.getElementById('storeSubStatus');
         const originalText = subBtn.textContent;
-        subBtn.textContent = 'Submitting…';
+        const reset = function () { subBtn.disabled = false; subBtn.textContent = originalText; };
+        subBtn.disabled = true;
+        subBtn.textContent = 'Opening payment…';
+        statusEl.textContent = '';
+        statusEl.className = 'form-status';
 
-        const { error } = await sb.from('store_subscription_requests').insert({
-          store_id: store.id,
-          user_id: userId
+        startFlutterwavePayment('store', {}, {
+          onSuccess: function () {
+            statusEl.textContent = 'Payment received — your store is active.';
+            statusEl.className = 'form-status success';
+            setTimeout(loadMyStore, 1200);
+          },
+          onPending: function () {
+            statusEl.textContent = 'We\'re still waiting for Mobile Money to confirm. Your store will update automatically as soon as it does — check back in a few minutes.';
+            statusEl.className = 'form-status';
+            subBtn.textContent = 'Waiting for confirmation…';
+          },
+          onError: function (err) {
+            statusEl.textContent = err.message || 'Something went wrong — please try again.';
+            statusEl.className = 'form-status error';
+            reset();
+          },
+          onClose: reset
         });
-
-        if (error) {
-          alert('Something went wrong: ' + error.message);
-          subBtn.disabled = false;
-          subBtn.textContent = originalText;
-          return;
-        }
-
-        loadMyStore();
       });
     }
+  }
+
+  // True if this user has a successful ₵5 verification payment made after
+  // their last ID submission — i.e. paid for but not yet used.
+  async function hasUnusedVerificationPayment(userId, lastSubmittedAt) {
+    let q = sb.from('flutterwave_payments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('kind', 'verification')
+      .eq('status', 'success')
+      .limit(1);
+    if (lastSubmittedAt) q = q.gt('paid_at', lastSubmittedAt);
+    const { data } = await q;
+    return !!(data && data.length);
   }
 
   async function loadVerificationTab() {
@@ -880,13 +890,6 @@
       return;
     }
 
-    const { data: settingsRows } = await sb
-      .from('site_settings')
-      .select('key, value')
-      .in('key', ['feature_momo_number', 'feature_momo_name', 'feature_momo_network']);
-    const settings = {};
-    (settingsRows || []).forEach(function (row) { settings[row.key] = row.value; });
-
     const rejectedNote = status === 'rejected'
       ? '<div class="callout" style="margin-bottom:16px;"><strong>Your last submission wasn\'t approved.</strong>' +
           (verification.review_note ? '<p style="margin-top:4px;">' + escapeHtml(verification.review_note) + '</p>' : '') +
@@ -897,12 +900,7 @@
       rejectedNote +
       '<div class="callout">' +
         '<strong>Get a verified badge</strong>' +
-        '<p style="margin:6px 0 12px;">Verified sellers stand out and get more trust from buyers — ₵5, one-time, via Mobile Money.</p>' +
-        '<div style="background:#fff; border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:16px; font-size:0.95rem;">' +
-          '<div>Send <strong>₵5</strong> to:</div>' +
-          '<div style="font-family:\'IBM Plex Mono\',monospace; font-size:1.1rem; margin:4px 0;">' + escapeHtml(settings.feature_momo_number || '') + '</div>' +
-          '<div>' + escapeHtml(settings.feature_momo_name || '') + ' — ' + escapeHtml(settings.feature_momo_network || '') + '</div>' +
-        '</div>' +
+        '<p style="margin:6px 0 16px;">Verified sellers stand out and get more trust from buyers — ₵5, one-time. Fill in your ID below, then pay with Mobile Money or card.</p>' +
         '<form id="verificationForm">' +
           '<div class="form-group"><label>ID type</label>' +
             '<select id="idType" required>' +
@@ -917,7 +915,7 @@
             '<input type="text" id="idNumber" required placeholder="e.g. GHA-000000000-0"></div>' +
           '<div class="form-group"><label>Upload a clear photo of your ID</label>' +
             '<input type="file" id="idDocument" accept="image/*" required></div>' +
-          '<button type="submit" class="btn-primary" style="margin-top:4px;">I\'ve sent ₵5 — submit for verification</button>' +
+          '<button type="submit" class="btn-primary" style="margin-top:4px;">Pay ₵5 and submit for verification</button>' +
           '<div class="form-status" id="verificationStatus"></div>' +
         '</form>' +
       '</div>';
@@ -949,8 +947,34 @@
         statusEl.textContent = 'Upload failed: ' + uploadError.message;
         statusEl.className = 'form-status error';
         btn.disabled = false;
-        btn.textContent = "I've sent ₵5 — submit for verification";
+        btn.textContent = "Pay ₵5 and submit for verification";
         return;
+      }
+
+      // Payment step. If they already paid since their last submission
+      // (e.g. the page closed before it saved), don't charge them again.
+      const paidAlready = await hasUnusedVerificationPayment(session.user.id, verification ? verification.submitted_at : null);
+      if (!paidAlready) {
+        btn.textContent = 'Opening payment…';
+        const payResult = await new Promise(function (resolve) {
+          startFlutterwavePayment('verification', {}, {
+            onSuccess: function () { resolve('success'); },
+            onPending: function () { resolve('pending'); },
+            onError: function (err) { resolve(err); },
+            onClose: function () { resolve('closed'); }
+          });
+        });
+        if (payResult !== 'success') {
+          statusEl.textContent = payResult === 'pending'
+            ? 'We\'re still waiting for Mobile Money to confirm your ₵5. Once it does, tap the button again — you won\'t be charged twice.'
+            : payResult === 'closed' ? 'Payment cancelled — your details weren\'t submitted.'
+            : (payResult.message || 'Payment failed — please try again.');
+          statusEl.className = payResult === 'pending' ? 'form-status' : 'form-status error';
+          btn.disabled = false;
+          btn.textContent = "Pay ₵5 and submit for verification";
+          return;
+        }
+        btn.textContent = 'Submitting…';
       }
 
       const { error: upsertError } = await sb.from('id_verifications').upsert({
@@ -968,7 +992,7 @@
         statusEl.textContent = 'Something went wrong: ' + upsertError.message;
         statusEl.className = 'form-status error';
         btn.disabled = false;
-        btn.textContent = "I've sent ₵5 — submit for verification";
+        btn.textContent = "Pay ₵5 and submit for verification";
         return;
       }
 

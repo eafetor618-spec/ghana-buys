@@ -1,0 +1,228 @@
+// Ghana Buys — Flutterwave payments (Supabase Edge Function: flutterwave-pay)
+//
+// Handles the three things sellers pay Ghana Buys for:
+//   feature       ₵10  -> listing featured for 7 days
+//   store         ₵30  -> store subscription +30 days
+//   verification  ₵5   -> verified-seller badge fee (ID still reviewed by admin)
+//
+// Three ways in:
+//   POST {action:"initialize", kind, listing_id?}   (logged-in user)
+//   POST {action:"verify", tx_ref}                  (logged-in user, after the popup)
+//   POST from Flutterwave with a "verif-hash" header (webhook backup, in case
+//        the buyer closes the popup before the site hears back)
+//
+// Secrets to set in Supabase -> Edge Functions -> Secrets:
+//   FLW_SECRET_KEY    your Flutterwave secret key (FLWSECK-... or FLWSECK_TEST-...)
+//   FLW_WEBHOOK_HASH  any long random phrase; paste the same phrase into
+//                     Flutterwave dashboard -> Settings -> Webhooks -> Secret hash
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
+//
+// Deploy with "Verify JWT" turned OFF — Flutterwave's webhook can't send a
+// Supabase login token. This function checks the user's token itself.
+
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const FLW_SECRET_KEY = Deno.env.get("FLW_SECRET_KEY") ?? "";
+const FLW_WEBHOOK_HASH = Deno.env.get("FLW_WEBHOOK_HASH") ?? "";
+
+const admin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false } },
+);
+
+// Prices in Ghana cedis. Change them here only — the site reads the amount
+// back from this function, so the page and the charge can never disagree.
+const PRICES: Record<string, number> = { feature: 10, store: 30, verification: 5 };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
+type Payment = {
+  id: string;
+  tx_ref: string;
+  user_id: string;
+  kind: "feature" | "store" | "verification";
+  target_id: string | null;
+  amount_ghs: number;
+  status: "pending" | "success" | "failed";
+};
+
+async function getUser(req: Request) {
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data.user) return null;
+  return data.user;
+}
+
+// Ask Flutterwave directly whether this tx_ref was paid. Never trust the
+// browser's "success" message on its own.
+async function checkWithFlutterwave(txRef: string) {
+  const res = await fetch(
+    "https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=" + encodeURIComponent(txRef),
+    { headers: { Authorization: "Bearer " + FLW_SECRET_KEY } },
+  );
+  const body = await res.json().catch(() => ({}));
+  return (body && body.data) || null;
+}
+
+// Give the seller what they paid for. Only ever runs once per payment,
+// because finalize() claims the row (pending -> success) first.
+async function applyPurchase(p: Payment) {
+  const now = Date.now();
+
+  if (p.kind === "feature" && p.target_id) {
+    const { data: listing } = await admin
+      .from("listings").select("featured, featured_until").eq("id", p.target_id).maybeSingle();
+    const current = listing?.featured && listing.featured_until ? new Date(listing.featured_until).getTime() : 0;
+    const base = current > now ? current : now;
+    await admin.from("listings")
+      .update({ featured: true, featured_until: new Date(base + 7 * DAY_MS).toISOString() })
+      .eq("id", p.target_id);
+  }
+
+  if (p.kind === "store" && p.target_id) {
+    const { data: store } = await admin
+      .from("stores").select("expires_at").eq("id", p.target_id).maybeSingle();
+    const current = store?.expires_at ? new Date(store.expires_at).getTime() : 0;
+    const base = current > now ? current : now;
+    await admin.from("stores")
+      .update({ active: true, expires_at: new Date(base + 30 * DAY_MS).toISOString() })
+      .eq("id", p.target_id);
+  }
+
+  // "verification": nothing to switch on here. The payment row is the
+  // record; the seller's ID still goes to the admin page for review.
+}
+
+async function finalize(p: Payment): Promise<"success" | "pending" | "failed"> {
+  if (p.status === "success") return "success";
+
+  const tx = await checkWithFlutterwave(p.tx_ref);
+  if (!tx) return "pending";
+
+  const paid =
+    tx.status === "successful" &&
+    tx.tx_ref === p.tx_ref &&
+    String(tx.currency).toUpperCase() === "GHS" &&
+    Number(tx.amount) >= Number(p.amount_ghs);
+
+  if (!paid) {
+    if (tx.status === "failed") {
+      await admin.from("flutterwave_payments").update({ status: "failed" }).eq("id", p.id).eq("status", "pending");
+      return "failed";
+    }
+    return "pending";
+  }
+
+  // Claim the row. If two calls race (popup + webhook), only one gets it back.
+  const { data: claimed } = await admin
+    .from("flutterwave_payments")
+    .update({ status: "success", paid_at: new Date().toISOString(), flw_transaction_id: tx.id ?? null })
+    .eq("id", p.id)
+    .eq("status", "pending")
+    .select()
+    .maybeSingle();
+
+  if (claimed) await applyPurchase(claimed as Payment);
+  return "success";
+}
+
+async function handleInitialize(req: Request, body: any) {
+  const user = await getUser(req);
+  if (!user) return json({ error: "Please log in first." }, 401);
+
+  const kind = String(body.kind || "");
+  if (!(kind in PRICES)) return json({ error: "Unknown payment type." }, 400);
+
+  let targetId: string | null = null;
+
+  if (kind === "feature") {
+    const { data: listing } = await admin
+      .from("listings").select("id, user_id").eq("id", body.listing_id || "").maybeSingle();
+    if (!listing || listing.user_id !== user.id) return json({ error: "Listing not found." }, 404);
+    targetId = listing.id;
+  }
+
+  if (kind === "store") {
+    const { data: store } = await admin
+      .from("stores").select("id").eq("user_id", user.id).maybeSingle();
+    if (!store) return json({ error: "Create your store profile first." }, 400);
+    targetId = store.id;
+  }
+
+  const txRef = "gb-" + kind + "-" + crypto.randomUUID();
+  const amount = PRICES[kind];
+
+  const { error } = await admin.from("flutterwave_payments").insert({
+    tx_ref: txRef,
+    user_id: user.id,
+    kind,
+    target_id: targetId,
+    amount_ghs: amount,
+  });
+  if (error) return json({ error: "Couldn't start the payment: " + error.message }, 500);
+
+  return json({
+    tx_ref: txRef,
+    amount,
+    currency: "GHS",
+    email: user.email,
+    name: (user.user_metadata && user.user_metadata.display_name) || user.email,
+  });
+}
+
+async function handleVerify(req: Request, body: any) {
+  const user = await getUser(req);
+  if (!user) return json({ error: "Please log in first." }, 401);
+
+  const { data: p } = await admin
+    .from("flutterwave_payments").select("*").eq("tx_ref", String(body.tx_ref || "")).maybeSingle();
+  if (!p || p.user_id !== user.id) return json({ error: "Payment not found." }, 404);
+
+  const status = await finalize(p as Payment);
+  return json({ status, kind: p.kind });
+}
+
+async function handleWebhook(req: Request) {
+  if (!FLW_WEBHOOK_HASH || req.headers.get("verif-hash") !== FLW_WEBHOOK_HASH) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const body = await req.json().catch(() => ({}));
+  const txRef = body?.data?.tx_ref || body?.txRef || body?.tx_ref;
+  if (txRef) {
+    const { data: p } = await admin.from("flutterwave_payments").select("*").eq("tx_ref", txRef).maybeSingle();
+    if (p) await finalize(p as Payment);
+  }
+  // Always 200 so Flutterwave doesn't keep retrying payments we don't know.
+  return new Response("ok", { status: 200 });
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (!FLW_SECRET_KEY) return json({ error: "Payments aren't set up yet (missing FLW_SECRET_KEY)." }, 500);
+
+  if (req.headers.get("verif-hash") !== null) return handleWebhook(req);
+
+  const body = await req.json().catch(() => ({}));
+  try {
+    if (body.action === "initialize") return await handleInitialize(req, body);
+    if (body.action === "verify") return await handleVerify(req, body);
+    return json({ error: "Unknown action." }, 400);
+  } catch (err) {
+    return json({ error: (err as Error).message || "Something went wrong." }, 500);
+  }
+});

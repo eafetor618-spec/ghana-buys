@@ -4,7 +4,7 @@
 // this is a live marketplace, so cached listings would quickly go stale.
 // Bump CACHE_NAME whenever a static asset below changes, so old cached
 // copies get replaced instead of served stale.
-const CACHE_NAME = 'ghanabuys-static-v2';
+const CACHE_NAME = 'ghanabuys-static-v3';
 
 const STATIC_ASSETS = [
   '/style.css',

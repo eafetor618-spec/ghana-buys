@@ -14,7 +14,6 @@
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://js.paystack.co/v1/inline.js"></script>
 </head>
 <body class="page-listing">
 
@@ -384,51 +383,42 @@
       return;
     }
 
-    const { data: settingsRows } = await sb
-      .from('site_settings')
-      .select('key, value')
-      .in('key', ['feature_momo_number', 'feature_momo_name', 'feature_momo_network']);
-    const settings = {};
-    (settingsRows || []).forEach(function (row) { settings[row.key] = row.value; });
-
     box.innerHTML =
       '<div class="callout" style="margin-top:12px;">' +
         '<strong>Get more views</strong>' +
-        '<p style="margin:6px 0 12px;">Feature this listing at the top of the marketplace for 7 days — ₵10 via Mobile Money.</p>' +
-        '<div style="background:#fff; border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; font-size:0.95rem;">' +
-          '<div>Send <strong>₵10</strong> to:</div>' +
-          '<div style="font-family:\'IBM Plex Mono\',monospace; font-size:1.1rem; margin:4px 0;">' + escapeHtml(settings.feature_momo_number || '') + '</div>' +
-          '<div>' + escapeHtml(settings.feature_momo_name || '') + ' — ' + escapeHtml(settings.feature_momo_network || '') + '</div>' +
-        '</div>' +
-        '<p style="margin:0 0 12px; font-size:0.9rem; color:var(--ink-soft,#555);">After sending, tap the button below. We\'ll verify the payment manually and feature your listing — usually within a few hours.</p>' +
-        '<button class="btn-primary" id="featureBtn" type="button">I\'ve sent the ₵10 — feature my listing</button>' +
+        '<p style="margin:6px 0 12px;">Feature this listing at the top of the marketplace for 7 days — ₵10. Pay with Mobile Money (MTN, Telecel, AirtelTigo) or card, and it goes live straight away.</p>' +
+        '<button class="btn-primary" id="featureBtn" type="button">Pay ₵10 — feature my listing</button>' +
         '<div class="form-status" id="featureStatus"></div>' +
       '</div>';
 
-    document.getElementById('featureBtn').addEventListener('click', async function () {
+    document.getElementById('featureBtn').addEventListener('click', function () {
       const btn = this;
       const statusEl = document.getElementById('featureStatus');
+      const reset = function () { btn.disabled = false; btn.textContent = 'Pay ₵10 — feature my listing'; };
       btn.disabled = true;
-      btn.textContent = 'Submitting…';
+      btn.textContent = 'Opening payment…';
       statusEl.textContent = '';
       statusEl.className = 'form-status';
 
-      const { error } = await sb.from('feature_requests').insert({
-        listing_id: listing.id,
-        user_id: session.user.id
+      startFlutterwavePayment('feature', { listing_id: listing.id }, {
+        onSuccess: function () {
+          statusEl.textContent = 'Payment received — your listing is now featured for 7 days.';
+          statusEl.className = 'form-status success';
+          btn.textContent = 'Featured ✓';
+          setTimeout(function () { location.reload(); }, 1500);
+        },
+        onPending: function () {
+          statusEl.textContent = 'We\'re still waiting for Mobile Money to confirm. Your listing will be featured automatically as soon as it does — refresh this page in a few minutes.';
+          statusEl.className = 'form-status';
+          btn.textContent = 'Waiting for confirmation…';
+        },
+        onError: function (err) {
+          statusEl.textContent = err.message || 'Something went wrong — please try again.';
+          statusEl.className = 'form-status error';
+          reset();
+        },
+        onClose: reset
       });
-
-      if (error) {
-        statusEl.textContent = 'Something went wrong: ' + error.message;
-        statusEl.className = 'form-status error';
-        btn.disabled = false;
-        btn.textContent = "I've sent the ₵10 — feature my listing";
-        return;
-      }
-
-      statusEl.textContent = 'Thanks — we\'ll verify your payment and feature this listing shortly.';
-      statusEl.className = 'form-status success';
-      btn.disabled = true;
     });
   }
 

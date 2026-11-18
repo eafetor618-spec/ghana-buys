@@ -6,98 +6,112 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* Paystack — public/test key only, safe to expose client-side.
-   Get this from Paystack dashboard -> Settings -> API Keys (pk_test_... or pk_live_...) */
-const PAYSTACK_PUBLIC_KEY = 'pk_test_0966980bbd23d49dc4e263d5640edd2c98c6396d';
+/* Flutterwave — PUBLIC key only, safe to show in the browser.
+   Get it from Flutterwave dashboard -> Settings -> API Keys.
+   Test key looks like FLWPUBK_TEST-...-X, live key like FLWPUBK-...-X.
+   The SECRET key never goes here: it lives in Supabase as FLW_SECRET_KEY. */
+const FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-PASTE-YOUR-PUBLIC-KEY-HERE-X';
 
-// Generic caller for our Paystack-backed edge functions (feature-listing,
-// store-subscription, etc). Each holds the Paystack SECRET key server-side
-// and does the real verification — never trust a client-side "success" signal alone.
-async function callPaidFeatureFn(fnName, action, payload) {
+// Loads Flutterwave's checkout script the first time someone pays, so
+// pages that never take payment don't download it.
+let flutterwaveScriptPromise = null;
+function loadFlutterwaveScript() {
+  if (window.FlutterwaveCheckout) return Promise.resolve();
+  if (!flutterwaveScriptPromise) {
+    flutterwaveScriptPromise = new Promise(function (resolve, reject) {
+      const s = document.createElement('script');
+      s.src = 'https://checkout.flutterwave.com/v3.js';
+      s.onload = function () { resolve(); };
+      s.onerror = function () {
+        flutterwaveScriptPromise = null;
+        reject(new Error('Couldn\'t load the payment window. Check your connection and try again.'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return flutterwaveScriptPromise;
+}
+
+// Calls our flutterwave-pay edge function (it holds the secret key and
+// does the real check with Flutterwave).
+async function callFlutterwaveFn(payload) {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) throw new Error('Not logged in');
-  const res = await fetch(SUPABASE_URL + '/functions/v1/' + fnName, {
+  if (!session) throw new Error('Please log in first.');
+  const res = await fetch(SUPABASE_URL + '/functions/v1/flutterwave-pay', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + session.access_token
+      'Authorization': 'Bearer ' + session.access_token,
+      'apikey': SUPABASE_ANON_KEY
     },
-    body: JSON.stringify(Object.assign({ action: action }, payload))
+    body: JSON.stringify(payload)
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  const data = await res.json().catch(function () { return {}; });
+  if (!res.ok) throw new Error(data.error || 'Payment request failed.');
   return data;
 }
 
-// Opens the Paystack popup, then verifies with the server before resolving.
-// Requires https://js.paystack.co/v1/inline.js loaded on the page.
-function startPaidFeatureCheckout(fnName, payload, onSuccess, onError) {
-  callPaidFeatureFn(fnName, 'initialize', payload)
-    .then(function (init) {
-      const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: init.email,
-        amount: init.amount,
-        currency: 'GHS',
-        ref: init.reference,
-        callback: function () {
-          callPaidFeatureFn(fnName, 'verify', { reference: init.reference })
-            .then(function (result) { onSuccess(result); })
-            .catch(function (err) { onError(err); });
-        },
-        onClose: function () {}
-      });
-      handler.openIframe();
-    })
-    .catch(function (err) { onError(err); });
+// Mobile Money approvals can take a few seconds to land, so keep asking
+// for up to ~40 seconds before giving up.
+async function confirmFlutterwavePayment(txRef) {
+  for (let i = 0; i < 8; i++) {
+    const result = await callFlutterwaveFn({ action: 'verify', tx_ref: txRef });
+    if (result.status === 'success' || result.status === 'failed') return result.status;
+    await new Promise(function (r) { setTimeout(r, 5000); });
+  }
+  return 'pending';
 }
 
-function startFeatureListingCheckout(listingId, onSuccess, onError) {
-  startPaidFeatureCheckout('feature-listing', { listing_id: listingId }, onSuccess, onError);
-}
+// kind: 'feature' (needs extra.listing_id), 'store', or 'verification'.
+// handlers: { onSuccess(), onError(err), onPending(), onClose() } — all optional.
+async function startFlutterwavePayment(kind, extra, handlers) {
+  handlers = handlers || {};
+  const fail = function (err) { if (handlers.onError) handlers.onError(err); };
+  try {
+    const [init] = await Promise.all([
+      callFlutterwaveFn(Object.assign({ action: 'initialize', kind: kind }, extra || {})),
+      loadFlutterwaveScript()
+    ]);
 
-function startStoreSubscriptionCheckout(onSuccess, onError) {
-  startPaidFeatureCheckout('store-subscription', {}, onSuccess, onError);
-}
+    let finished = false;
+    const finish = async function () {
+      if (finished) return;
+      finished = true;
+      try {
+        const status = await confirmFlutterwavePayment(init.tx_ref);
+        if (status === 'success') { if (handlers.onSuccess) handlers.onSuccess(); }
+        else if (status === 'failed') { fail(new Error('The payment didn\'t go through. You haven\'t been charged — please try again.')); }
+        else if (handlers.onPending) { handlers.onPending(); }
+      } catch (err) { fail(err); }
+    };
 
-// Buyer-pays-seller checkout, routed via Paystack subaccount split so the
-// money settles directly with the seller — Ghana Buys never holds it.
-async function callPayListingFn(action, payload) {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) throw new Error('Not logged in');
-  const res = await fetch(SUPABASE_URL + '/functions/v1/pay-listing', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + session.access_token
-    },
-    body: JSON.stringify(Object.assign({ action: action }, payload))
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
-}
-
-function startListingPaymentCheckout(listingId, onSuccess, onError) {
-  callPayListingFn('initialize', { listing_id: listingId })
-    .then(function (init) {
-      const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: init.email,
-        amount: init.amount,
-        currency: 'GHS',
-        ref: init.reference,
-        subaccount: init.subaccount,
-        callback: function () {
-          callPayListingFn('verify', { reference: init.reference })
-            .then(function (result) { onSuccess(result); })
-            .catch(function (err) { onError(err); });
-        },
-        onClose: function () {}
-      });
-      handler.openIframe();
-    })
-    .catch(function (err) { onError(err); });
+    const modal = FlutterwaveCheckout({
+      public_key: FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: init.tx_ref,
+      amount: init.amount,
+      currency: 'GHS',
+      payment_options: 'mobilemoneyghana, card',
+      customer: { email: init.email, name: init.name },
+      customizations: {
+        title: 'Ghana Buys',
+        description: kind === 'feature' ? 'Feature your listing for 7 days'
+          : kind === 'store' ? 'Store subscription — 30 days'
+          : 'Verified seller badge',
+        logo: location.origin + '/logo-icon.png'
+      },
+      callback: function () {
+        try { modal.close(); } catch (e) {}
+        finish();
+      },
+      onclose: function (incomplete) {
+        // If they approved on their phone then closed the window, still check.
+        if (!finished && incomplete === false) { finish(); return; }
+        if (!finished && handlers.onClose) handlers.onClose();
+      }
+    });
+  } catch (err) {
+    fail(err);
+  }
 }
 
 // In-app messaging: insert one message row. listingId may be null for a

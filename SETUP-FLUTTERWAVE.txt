@@ -1,0 +1,44 @@
+GHANA BUYS — TURNING ON FLUTTERWAVE PAYMENTS
+============================================
+
+What's automatic now: Feature a listing (GHS 10), Store subscription (GHS 30),
+Verified badge (GHS 5). Sellers pay with MoMo or card; it switches on instantly.
+ID documents still come to your admin page for approval.
+
+STEP 1 — Flutterwave account
+  Sign up at flutterwave.com as a Ghana business. Start in TEST mode.
+  Settings -> API Keys: you'll see a PUBLIC key (FLWPUBK_TEST-...)
+  and a SECRET key (FLWSECK_TEST-...). Never share the secret key with anyone.
+
+STEP 2 — Database table (Supabase project wstjabsjsxwbkbiouyug)
+  SQL Editor -> New query -> paste all of flutterwave-setup.sql -> Run.
+
+STEP 3 — Server function
+  Edge Functions -> Deploy a new function -> Via editor.
+  Name it exactly:  flutterwave-pay
+  Delete the sample code, paste all of flutterwave-pay-index.ts.txt, Deploy.
+  Then open the function's settings and turn OFF "Verify JWT" / "Enforce JWT
+  verification", and save. (The function checks logins itself; Flutterwave's
+  confirmations can't log in.)
+
+STEP 4 — Secrets
+  Edge Functions -> Secrets -> add two:
+    FLW_SECRET_KEY    = your Flutterwave SECRET key
+    FLW_WEBHOOK_HASH  = any long random phrase you make up, e.g. tema-buys-8f3k2-mango-91
+  
+STEP 5 — Flutterwave webhook (backup confirmation)
+  Flutterwave dashboard -> Settings -> Webhooks
+    URL:          https://wstjabsjsxwbkbiouyug.supabase.co/functions/v1/flutterwave-pay
+    Secret hash:  the SAME phrase you used for FLW_WEBHOOK_HASH
+  Tick "charge completed" events if asked. Save.
+
+STEP 6 — Public key on the site
+  In marketplace.js, line 13, replace
+    FLWPUBK_TEST-PASTE-YOUR-PUBLIC-KEY-HERE-X
+  with your PUBLIC key. Upload the site to Netlify.
+
+STEP 7 — Test, then go live
+  With TEST keys, feature one of your own listings and pay using
+  Flutterwave's test MoMo/card details (shown in their docs). Check the
+  listing becomes Featured. Then swap BOTH keys for the LIVE ones
+  (public key in marketplace.js, secret key in Supabase Secrets).

@@ -120,12 +120,13 @@
     monthStart.setHours(0, 0, 0, 0);
 
     const [
-      featurePaymentsAll, storePaymentsAll,
+      featurePaymentsAll, storePaymentsAll, flwPaymentsAll,
       activeListingsCount, usersCount,
       reportsCount, pendingIdCount, pendingFeatureCount, pendingStoreSubCount
     ] = await Promise.all([
       sb.from('feature_payments').select('amount_pesewas, created_at').eq('status', 'success'),
       sb.from('store_payments').select('amount_pesewas, created_at').eq('status', 'success'),
+      sb.from('flutterwave_payments').select('kind, amount_ghs, paid_at').eq('status', 'success'),
       sb.from('listings').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       sb.from('profiles').select('id', { count: 'exact', head: true }),
       sb.from('listing_reports').select('id', { count: 'exact', head: true }),
@@ -143,11 +144,17 @@
       return (rows || []).filter(function (r) { return !since || new Date(r.created_at) >= since; }).length;
     }
 
-    const featureRows = featurePaymentsAll.data || [];
-    const storeRows = storePaymentsAll.data || [];
+    // Flutterwave rows are in cedis with a paid_at date; reshape them to
+    // match the older payment tables (pesewas + created_at).
+    const flwRows = (flwPaymentsAll.data || []).map(function (r) {
+      return { kind: r.kind, amount_pesewas: Math.round(Number(r.amount_ghs) * 100), created_at: r.paid_at };
+    });
+    const featureRows = (featurePaymentsAll.data || []).concat(flwRows.filter(function (r) { return r.kind === 'feature'; }));
+    const storeRows = (storePaymentsAll.data || []).concat(flwRows.filter(function (r) { return r.kind === 'store'; }));
+    const verifyRows = flwRows.filter(function (r) { return r.kind === 'verification'; });
 
-    const monthPesewas = sumSince(featureRows, monthStart) + sumSince(storeRows, monthStart);
-    const allTimePesewas = sumSince(featureRows, null) + sumSince(storeRows, null);
+    const monthPesewas = sumSince(featureRows, monthStart) + sumSince(storeRows, monthStart) + sumSince(verifyRows, monthStart);
+    const allTimePesewas = sumSince(featureRows, null) + sumSince(storeRows, null) + sumSince(verifyRows, null);
     const monthFeatureCount = countSince(featureRows, monthStart);
     const monthStoreCount = countSince(storeRows, monthStart);
     const allFeatureCount = featureRows.length;
@@ -165,8 +172,8 @@
 
     panel.innerHTML =
       '<div class="admin-stat-grid">' +
-        statCard('Revenue this month', formatPrice(monthPesewas / 100), monthFeatureCount + ' feature(s) + ' + monthStoreCount + ' store sub(s)') +
-        statCard('Revenue all-time', formatPrice(allTimePesewas / 100), allFeatureCount + ' feature(s) + ' + allStoreCount + ' store sub(s)') +
+        statCard('Revenue this month', formatPrice(monthPesewas / 100), monthFeatureCount + ' feature(s) + ' + monthStoreCount + ' store sub(s) + ' + countSince(verifyRows, monthStart) + ' verification(s)') +
+        statCard('Revenue all-time', formatPrice(allTimePesewas / 100), allFeatureCount + ' feature(s) + ' + allStoreCount + ' store sub(s) + ' + verifyRows.length + ' verification(s)') +
         statCard('Active listings', activeListingsCount.count || 0) +
         statCard('Registered users', usersCount.count || 0) +
       '</div>' +
@@ -319,7 +326,19 @@
       return;
     }
 
+    // Which of these sellers paid the ₵5 through Flutterwave?
+    const { data: verifyPayments } = await sb
+      .from('flutterwave_payments')
+      .select('user_id, paid_at')
+      .eq('kind', 'verification')
+      .eq('status', 'success')
+      .in('user_id', verifications.map(function (v) { return v.user_id; }));
+
     const cards = await Promise.all(verifications.map(async function (v) {
+      const paid = (verifyPayments || []).some(function (pay) { return pay.user_id === v.user_id; });
+      const paidNote = paid
+        ? '<p class="admin-report-meta" style="color:green;"><strong>✓ ₵5 paid via Flutterwave</strong></p>'
+        : '<p class="admin-report-meta" style="color:#b00;"><strong>No Flutterwave payment found</strong> — check your MoMo before approving.</p>';
       let docLink = '';
       if (v.document_path) {
         const { data: signed } = await sb.storage.from('id-documents').createSignedUrl(v.document_path, 600);
@@ -342,6 +361,7 @@
           '<p class="best-for">' + escapeHtml(v.id_type || 'ID') + (v.id_number ? ' — ' + escapeHtml(v.id_number) : '') + '</p>' +
           (docLink ? '<p>' + docLink + '</p>' : '') +
           ocrNote +
+          paidNote +
           '<p class="admin-report-meta">Submitted ' + (v.submitted_at ? formatDate(v.submitted_at) : '—') + '</p>' +
           '<div class="admin-mod-actions">' +
             '<button type="button" class="btn-primary" data-action="approveId" data-id="' + v.user_id + '">Approve</button>' +
